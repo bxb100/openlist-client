@@ -217,6 +217,16 @@ class SettingsPageContentTest {
     }
 
     @Test
+    fun validCacheFieldsDoNotShowZeroValueWarnings() {
+        setSettingsContent()
+
+        composeRule.onNodeWithTag(SettingsUiTags.CACHE_SIZE).performScrollTo()
+        composeRule.onNodeWithText("0 GB 会停用缓存写入").assertDoesNotExist()
+        composeRule.onNodeWithText("0 天会停用缓存写入").assertDoesNotExist()
+        composeRule.onNodeWithText("0 个会停用缓存写入").assertDoesNotExist()
+    }
+
+    @Test
     fun eachInvalidCacheFieldShowsItsOwnErrorAndBlocksSaving() {
         setSettingsContent()
 

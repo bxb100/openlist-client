@@ -660,8 +660,7 @@ private fun CachePolicyFields(
                 onValueChange = onSizeGiBChange,
                 label = "缓存容量",
                 suffix = "GB",
-                helperText = validation.sizeError ?: "0 GB 会停用缓存写入",
-                isError = validation.sizeError != null,
+                errorMessage = validation.sizeError,
                 keyboardType = KeyboardType.Decimal,
                 tag = SettingsUiTags.CACHE_SIZE,
                 enabled = enabled,
@@ -672,8 +671,7 @@ private fun CachePolicyFields(
                 onValueChange = onAgeDaysChange,
                 label = "保留时间",
                 suffix = "天",
-                helperText = validation.ageError ?: "0 天会停用缓存写入",
-                isError = validation.ageError != null,
+                errorMessage = validation.ageError,
                 keyboardType = KeyboardType.Decimal,
                 tag = SettingsUiTags.CACHE_AGE,
                 enabled = enabled,
@@ -684,8 +682,7 @@ private fun CachePolicyFields(
                 onValueChange = onEntriesChange,
                 label = "文件数量",
                 suffix = "个",
-                helperText = validation.entriesError ?: "0 个会停用缓存写入",
-                isError = validation.entriesError != null,
+                errorMessage = validation.entriesError,
                 keyboardType = KeyboardType.Number,
                 tag = SettingsUiTags.CACHE_ENTRIES,
                 enabled = enabled,
@@ -718,8 +715,7 @@ private fun CachePolicyField(
     onValueChange: (String) -> Unit,
     label: String,
     suffix: String,
-    helperText: String,
-    isError: Boolean,
+    errorMessage: String?,
     keyboardType: KeyboardType,
     tag: String,
     enabled: Boolean,
@@ -730,16 +726,16 @@ private fun CachePolicyField(
         onValueChange = onValueChange,
         label = { Text(label) },
         suffix = { Text(suffix) },
-        supportingText = { Text(helperText) },
-        isError = isError,
+        supportingText = errorMessage?.let { message -> { Text(message) } },
+        isError = errorMessage != null,
         enabled = enabled,
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         modifier = modifier
             .testTag(tag)
             .semantics {
-                if (isError) {
-                    error(helperText)
+                if (errorMessage != null) {
+                    error(errorMessage)
                     liveRegion = LiveRegionMode.Polite
                 }
             },
