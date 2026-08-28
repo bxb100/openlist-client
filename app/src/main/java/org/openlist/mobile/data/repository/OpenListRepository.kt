@@ -96,7 +96,7 @@ class OpenListRepository(
 
     suspend fun list(path: String, refresh: Boolean = false): DirectoryListing {
         val profile = sessionStore.snapshot().server
-        return api.list(
+        return api.listAll(
             path = path,
             password = pathCredentials.passwordFor(profile, path),
             refresh = refresh,
@@ -110,7 +110,7 @@ class OpenListRepository(
         refresh: Boolean = false,
     ): DirectoryListing {
         val profile = sessionStore.snapshot().server
-        val result = api.list(path = path, password = password, refresh = refresh)
+        val result = api.listAll(path = path, password = password, refresh = refresh)
         pathCredentials.remember(profile, path, password)
         return result
     }

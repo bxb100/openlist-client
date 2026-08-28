@@ -30,6 +30,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.openlist.mobile.OpenListApplication
+import org.openlist.mobile.data.api.OpenListApi
 import org.openlist.mobile.data.logging.LogSanitizer
 import org.openlist.mobile.data.upload.FileRandomAccessUploadSource
 import org.openlist.mobile.data.upload.JobBoundUploadSession
@@ -196,9 +197,17 @@ class UploadWorker(
                 ),
             )
             val source = FileRandomAccessUploadSource(staged.file, staged.size)
+            val multipartEnabled = try {
+                OpenListApi(jobHttpClient).serverCapabilities().multipartEnabled
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                false
+            }
             val uploader = ResumableUploader(
                 transport = OpenListMultipartUploadApi(jobHttpClient),
                 checkpoints = checkpointStore,
+                multipartEnabled = multipartEnabled,
             )
             val result = uploader.upload(command, source, ::publishProgress)
             sourceGrant?.onWorkDisposition(UploadWorkDisposition.SUCCESS)

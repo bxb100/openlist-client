@@ -50,7 +50,14 @@ class OpenListHttpClient(
         body: Any? = null,
         query: Map<String, String?> = emptyMap(),
         headers: Map<String, String> = emptyMap(),
-    ): T = executeForType("POST", path, query, headers, jsonBody(body), object : TypeToken<T>() {}.type) as T
+    ): T = executeForType(
+        "POST",
+        path,
+        query,
+        headers,
+        if (body == null) null else jsonBody(body),
+        object : TypeToken<T>() {}.type,
+    ) as T
 
     suspend inline fun <reified T> put(
         path: String,

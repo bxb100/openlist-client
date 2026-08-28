@@ -23,15 +23,21 @@ data class UpdateMeRequest(
     val username: String,
     val password: String = "",
     @SerializedName("sso_id") val ssoId: String = "",
+    @SerializedName("old_password") val oldPassword: String? = null,
 )
 
 data class ListRequest(
     val path: String,
     val password: String = "",
     val page: Int = 1,
-    @SerializedName("per_page") val perPage: Int = 0,
+    @SerializedName("per_page") val perPage: Int = 100,
     val refresh: Boolean = false,
-)
+) {
+    init {
+        require(page >= 1) { "page must be at least 1" }
+        require(perPage in 1..100) { "perPage must be between 1 and 100" }
+    }
+}
 
 data class GetRequest(val path: String, val password: String = "")
 
@@ -56,11 +62,13 @@ data class SearchObject(
     @SerializedName("is_dir") val isDirectory: Boolean = false,
     val size: Long = 0,
     val type: Int = 0,
+    val path: String = "",
 )
 
 data class DirectoryEntry(
     val name: String = "",
     val modified: String = "",
+    val path: String = "",
 )
 
 data class PathRequest(val path: String)
@@ -84,7 +92,10 @@ data class RemoveRequest(val dir: String, val names: List<String>)
 
 data class VerifyTwoFactorRequest(val code: String, val secret: String)
 
-data class TwoFactorSetup(val qr: String = "", val secret: String = "")
+data class TwoFactorSetup(
+    @SerializedName(value = "qr_code", alternate = ["qr"]) val qr: String = "",
+    val secret: String = "",
+)
 
 data class TaskInfo(
     val id: String = "",

@@ -27,6 +27,7 @@ data class UploadRetryPolicy(
 class ResumableUploader(
     private val transport: MultipartUploadTransport,
     private val checkpoints: UploadCheckpointStore,
+    private val multipartEnabled: Boolean = false,
     private val retryPolicy: UploadRetryPolicy = UploadRetryPolicy(),
     private val sleeper: UploadSleeper = UploadSleeper { delay(it) },
     private val nowMillis: () -> Long = System::currentTimeMillis,
@@ -42,7 +43,7 @@ class ResumableUploader(
         onProgress(UploadProgress(uploadedBytes = 0, totalBytes = command.fileSize))
 
         val initRequest = command.toInitRequest()
-        if (command.fileSize == 0L) {
+        if (command.fileSize == 0L || !multipartEnabled) {
             return legacyPut(command, initRequest, source, onProgress)
         }
 
@@ -251,7 +252,7 @@ class ResumableUploader(
     ): UploadResult {
         transport.legacyPut(
             request,
-            source.requestBody(0, command.fileSize, command.mimeType),
+            source.requestBody(0, command.fileSize, "application/octet-stream"),
         )
         checkpoints.remove(command.checkpointKey)
         onProgress(UploadProgress(command.fileSize, command.fileSize))

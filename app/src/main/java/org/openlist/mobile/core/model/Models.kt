@@ -77,6 +77,8 @@ data class OpenListObject(
     val hashinfo: String = "",
     @SerializedName("hash_info") val hashes: Map<String, String>? = null,
     @SerializedName("mount_details") val mountDetails: StorageDetails? = null,
+    val id: String = "",
+    val path: String = "",
 ) {
     val mediaKind: MediaKind
         get() = when {
@@ -93,6 +95,7 @@ data class StorageDetails(
     @SerializedName("total_space") val totalSpace: Long = 0,
     @SerializedName("used_space") val usedSpace: Long = 0,
     @SerializedName("free_space") val freeSpace: Long = 0,
+    @SerializedName("driver_name") val driverName: String = "",
 )
 
 data class DirectoryListing(
@@ -126,8 +129,12 @@ data class FileDetails(
     val provider: String = "unknown",
     @field:JsonAdapter(NullToEmptyCollectionAdapterFactory::class, nullSafe = false)
     val related: List<OpenListObject> = emptyList(),
+    val id: String = "",
+    val path: String = "",
 ) {
     fun asObject() = OpenListObject(
+        id = id,
+        path = path,
         name = name,
         size = size,
         isDirectory = isDirectory,

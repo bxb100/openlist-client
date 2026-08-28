@@ -42,13 +42,18 @@ class OpenListApi(private val http: OpenListHttpClient) {
 
     suspend fun me(): OpenListUser = http.get("/api/me")
 
-    suspend fun updateMe(user: OpenListUser, password: String = "") =
+    suspend fun updateMe(
+        user: OpenListUser,
+        password: String = "",
+        currentPassword: String? = null,
+    ) =
         http.post<Unit>(
             "/api/me/update",
             UpdateMeRequest(
                 username = user.username,
                 password = password,
                 ssoId = user.ssoId,
+                oldPassword = currentPassword,
             ),
         )
 
@@ -70,12 +75,51 @@ class OpenListApi(private val http: OpenListHttpClient) {
         path: String,
         password: String = "",
         page: Int = 1,
-        perPage: Int = 0,
+        perPage: Int = 100,
         refresh: Boolean = false,
     ): DirectoryListing = http.post(
         "/api/fs/list",
         ListRequest(path, password, page, perPage, refresh),
     )
+
+    /**
+     * Lists a complete directory without relying on the undocumented `per_page = 0` extension.
+     * The refresh flag is sent only for the first page so one logical refresh does not repeatedly
+     * invalidate the server-side listing while subsequent pages are being read.
+     */
+    suspend fun listAll(
+        path: String,
+        password: String = "",
+        refresh: Boolean = false,
+        perPage: Int = 100,
+    ): DirectoryListing {
+        val firstPage = list(
+            path = path,
+            password = password,
+            page = 1,
+            perPage = perPage,
+            refresh = refresh,
+        )
+        val content = firstPage.content.toMutableList()
+        val lastPage = if (firstPage.total <= 0) {
+            1L
+        } else {
+            ((firstPage.total - 1) / perPage) + 1
+        }.coerceAtMost(Int.MAX_VALUE.toLong())
+
+        var page = 2L
+        while (page <= lastPage) {
+            content += list(
+                path = path,
+                password = password,
+                page = page.toInt(),
+                perPage = perPage,
+                refresh = false,
+            ).content
+            page++
+        }
+        return firstPage.copy(content = content)
+    }
 
     suspend fun get(path: String, password: String = ""): FileDetails =
         http.post("/api/fs/get", GetRequest(path, password))

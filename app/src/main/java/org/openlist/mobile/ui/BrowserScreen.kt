@@ -2361,18 +2361,43 @@ private fun EmptyState(
     }
 }
 
-private fun SearchObject.toBrowserEntry(): BrowserEntry {
-    val resultParent = normalizedRemotePath(parent)
+internal fun SearchObject.toBrowserEntry(): BrowserEntry {
+    val documentedPath = path.trim()
+        .takeIf(::isSafeSearchRemotePath)
+        ?.trimEnd('/')
+    val resultPath = documentedPath ?: joinRemotePath(normalizedRemotePath(parent), name)
+    val resultParent = documentedPath?.let(::parentRemotePath) ?: normalizedRemotePath(parent)
+    val resultName = documentedPath?.substringAfterLast('/')?.takeIf(String::isNotBlank) ?: name
     return BrowserEntry(
-        path = joinRemotePath(resultParent, name),
+        path = resultPath,
         parent = resultParent,
         item = OpenListObject(
-            name = name,
+            path = resultPath,
+            name = resultName,
             size = size,
             isDirectory = isDirectory,
             type = type,
         ),
     )
+}
+
+private fun isSafeSearchRemotePath(path: String): Boolean {
+    if (path.length <= 1 || !path.startsWith('/') || path.startsWith("//")) return false
+    if (
+        '\\' in path ||
+        '?' in path ||
+        '#' in path ||
+        "://" in path ||
+        path.contains("%2f", ignoreCase = true) ||
+        path.contains("%5c", ignoreCase = true) ||
+        path.any(Char::isISOControl)
+    ) {
+        return false
+    }
+    return path.split('/').none { segment ->
+        val decodedDots = segment.replace("%2e", ".", ignoreCase = true)
+        decodedDots == "." || decodedDots == ".."
+    }
 }
 
 private fun normalizedRemotePath(path: String): String = when {

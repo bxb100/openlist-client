@@ -4,6 +4,7 @@ import com.google.gson.JsonElement
 import com.google.gson.reflect.TypeToken
 import okhttp3.Request
 import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.openlist.mobile.data.api.OpenListHttpClient
 import java.lang.reflect.Type
@@ -69,8 +70,9 @@ class GenericOpenListService(val http: OpenListHttpClient) {
     ): Any {
         require(endpoint.supports(method)) { "${endpoint.path} does not support $method" }
         require(body == null || rawBody == null) { "Specify body or rawBody, not both" }
-        val requestBody = rawBody ?: when (method) {
-            ApiHttpMethod.GET, ApiHttpMethod.HEAD -> null
+        val requestBody = rawBody ?: when {
+            method == ApiHttpMethod.GET || method == ApiHttpMethod.HEAD -> null
+            body == null -> null
             else -> http.jsonBody(body)
         }
         return http.executeForType(
@@ -160,7 +162,7 @@ class GenericOpenListService(val http: OpenListHttpClient) {
     ): Response {
         val normalizedMethod = method.uppercase()
         val requestBody = body ?: when (normalizedMethod) {
-            "POST", "PUT", "PATCH" -> http.jsonBody(null)
+            "POST", "PUT", "PATCH" -> ByteArray(0).toRequestBody(null)
             else -> null
         }
         val requestBuilder = if (includeOpenListToken) {
