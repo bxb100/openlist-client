@@ -1,0 +1,6291 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "默认模块",
+    "description": "Welcome to the **OpenList Project API documentation**!\n\nOpenList is a resilient, community-driven fork of AList, built to ensure long-term freedom and trust in open-source file listing systems amid the Open Source Trust Crisis.\n\n**GitHub Repository**: https://github.com/OpenListTeam/OpenList\n\n\n## Authentication\n\nMost endpoints require JWT authentication. Include the token in the Authorization header:\n```\nAuthorization: <token>\n```\n\nObtain a token via `/api/auth/login` endpoint.\n\n## Response Format\n\nAll responses follow this structure:\n```json\n{\n  \"code\": 200,\n  \"message\": \"success\",\n  \"data\": {}\n}\n```\n\nError responses:\n```json\n{\n  \"code\": 400,\n  \"message\": \"error message\",\n  \"data\": null\n}\n```\n",
+    "version": "1.0",
+    "contact": {
+      "name": "OpenList Team",
+      "url": "https://github.com/OpenListTeam/OpenList"
+    },
+    "license": {
+      "name": "AGPL-3.0",
+      "url": "https://github.com/OpenListTeam/OpenList/blob/main/LICENSE"
+    }
+  },
+  "tags": [
+    {
+      "name": "Authentication"
+    },
+    {
+      "name": "User"
+    },
+    {
+      "name": "Admin"
+    },
+    {
+      "name": "File System"
+    },
+    {
+      "name": "Public"
+    },
+    {
+      "name": "Sharing"
+    },
+    {
+      "name": "TS版本接口"
+    },
+    {
+      "name": "Two-Factor Authentication"
+    },
+    {
+      "name": "Single Sign-On"
+    },
+    {
+      "name": "WebAuthn"
+    },
+    {
+      "name": "SSH"
+    },
+    {
+      "name": "Storage"
+    },
+    {
+      "name": "Settings"
+    },
+    {
+      "name": "Meta"
+    },
+    {
+      "name": "Search Index"
+    },
+    {
+      "name": "Offline Download"
+    },
+    {
+      "name": "Archive"
+    }
+  ],
+  "paths": {
+    "/api/auth/login": {
+      "post": {
+        "summary": "User login",
+        "deprecated": false,
+        "description": "Authenticate user with username and password, returns JWT token",
+        "operationId": "postAuthlogin",
+        "tags": [
+          "Authentication"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "Invalid request or wrong credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/auth/login/hash": {
+      "post": {
+        "summary": "User login with pre-hashed password",
+        "deprecated": false,
+        "description": "Authenticate using username and pre-hashed password (SHA256)",
+        "operationId": "postAuthloginhash",
+        "tags": [
+          "Authentication"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username",
+                  "password"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "examples": [
+                      "admin"
+                    ]
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "SHA256 hash of password",
+                    "examples": [
+                      "hashed_password_string"
+                    ]
+                  },
+                  "otp_code": {
+                    "type": "string",
+                    "description": "2FA code if enabled"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/auth/login/ldap": {
+      "post": {
+        "summary": "LDAP login",
+        "deprecated": false,
+        "description": "Authenticate user via LDAP directory service",
+        "operationId": "postAuthloginldap",
+        "tags": [
+          "Authentication"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "LDAP authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/auth/logout": {
+      "get": {
+        "summary": "User logout",
+        "deprecated": false,
+        "description": "Invalidate current session token",
+        "operationId": "getAuthlogout",
+        "tags": [
+          "Authentication"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Logout successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/auth/2fa/generate": {
+      "post": {
+        "summary": "Generate 2FA secret",
+        "deprecated": false,
+        "description": "Generate a new 2FA (TOTP) secret for current user",
+        "operationId": "postAuth2fagenerate",
+        "tags": [
+          "Authentication",
+          "Two-Factor Authentication"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "2FA secret generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "qr_code": {
+                              "type": "string",
+                              "description": "Base64-encoded QR code image"
+                            },
+                            "secret": {
+                              "type": "string",
+                              "description": "TOTP secret key"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/auth/2fa/verify": {
+      "post": {
+        "summary": "Verify and enable 2FA",
+        "deprecated": false,
+        "description": "Verify TOTP code and enable 2FA for current user",
+        "operationId": "postAuth2faverify",
+        "tags": [
+          "Authentication",
+          "Two-Factor Authentication"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "code"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "description": "6-digit TOTP code",
+                    "examples": [
+                      "123456"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "2FA enabled successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "Invalid verification code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/auth/sso": {
+      "get": {
+        "summary": "SSO login redirect",
+        "deprecated": false,
+        "description": "Redirect to configured SSO provider for authentication",
+        "operationId": "getAuthsso",
+        "tags": [
+          "Authentication",
+          "Single Sign-On"
+        ],
+        "parameters": [],
+        "responses": {
+          "302": {
+            "description": "Redirect to SSO provider",
+            "headers": {}
+          },
+          "400": {
+            "description": "SSO not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/auth/sso_callback": {
+      "get": {
+        "summary": "SSO callback handler",
+        "deprecated": false,
+        "description": "Handle callback from SSO provider after authentication",
+        "operationId": "getAuthsso_callback",
+        "tags": [
+          "Authentication",
+          "Single Sign-On"
+        ],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Authorization code from SSO provider",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "State parameter for CSRF protection",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SSO login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "SSO callback failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/authn/webauthn_begin_login": {
+      "get": {
+        "summary": "Begin WebAuthn login",
+        "deprecated": false,
+        "description": "Initiate WebAuthn (FIDO2/Passkey) authentication flow",
+        "operationId": "getAuthnwebauthn_begin_login",
+        "tags": [
+          "Authentication",
+          "WebAuthn"
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "query",
+            "description": "Username for WebAuthn login",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "WebAuthn challenge generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "description": "WebAuthn credential request options",
+                          "properties": {}
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "WebAuthn not enabled or user not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/authn/webauthn_finish_login": {
+      "post": {
+        "summary": "Finish WebAuthn login",
+        "deprecated": false,
+        "description": "Complete WebAuthn authentication with signed challenge",
+        "operationId": "postAuthnwebauthn_finish_login",
+        "tags": [
+          "Authentication",
+          "WebAuthn"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "WebAuthn credential assertion response",
+                "properties": {}
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "WebAuthn login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "WebAuthn verification failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/authn/webauthn_begin_registration": {
+      "get": {
+        "summary": "Begin WebAuthn registration",
+        "deprecated": false,
+        "description": "Start registering a new WebAuthn credential (requires authentication)",
+        "operationId": "getAuthnwebauthn_begin_registration",
+        "tags": [
+          "Authentication",
+          "WebAuthn"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "WebAuthn registration challenge generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "description": "WebAuthn credential creation options",
+                          "properties": {}
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/authn/webauthn_finish_registration": {
+      "post": {
+        "summary": "Finish WebAuthn registration",
+        "deprecated": false,
+        "description": "Complete WebAuthn credential registration",
+        "operationId": "postAuthnwebauthn_finish_registration",
+        "tags": [
+          "Authentication",
+          "WebAuthn"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "WebAuthn credential creation response",
+                "properties": {}
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "WebAuthn credential registered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "Registration failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/authn/delete_authn": {
+      "post": {
+        "summary": "Delete WebAuthn credential",
+        "deprecated": false,
+        "description": "Remove a registered WebAuthn credential",
+        "operationId": "postAuthndelete_authn",
+        "tags": [
+          "Authentication",
+          "WebAuthn"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Base64-encoded credential ID",
+                    "examples": [
+                      "credential_id_base64"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Credential deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/authn/getcredentials": {
+      "get": {
+        "summary": "Get WebAuthn credentials",
+        "deprecated": false,
+        "description": "List all registered WebAuthn credentials for current user",
+        "operationId": "getAuthngetcredentials",
+        "tags": [
+          "Authentication",
+          "WebAuthn"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Credentials list retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "description": "Base64-encoded credential ID"
+                              },
+                              "created_at": {
+                                "type": "string",
+                                "format": "date-time"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/me": {
+      "get": {
+        "summary": "Get current user info",
+        "deprecated": false,
+        "description": "Retrieve information about the currently authenticated user",
+        "operationId": "getMe",
+        "tags": [
+          "User"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "User info retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/me/update": {
+      "post": {
+        "summary": "Update current user",
+        "deprecated": false,
+        "description": "Update password or other settings for current user",
+        "operationId": "postMeupdate",
+        "tags": [
+          "User"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "password": {
+                    "type": "string",
+                    "description": "New password"
+                  },
+                  "old_password": {
+                    "type": "string",
+                    "description": "Current password (required for password change)"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "User updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "Invalid request or wrong old password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/me/sshkey/list": {
+      "get": {
+        "summary": "List my SSH public keys",
+        "deprecated": false,
+        "description": "Get list of SSH public keys for current user",
+        "operationId": "getMesshkeylist",
+        "tags": [
+          "User",
+          "SSH"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "SSH keys retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "public_key": {
+                                "type": "string"
+                              },
+                              "created_at": {
+                                "type": "string",
+                                "format": "date-time"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/me/sshkey/add": {
+      "post": {
+        "summary": "Add SSH public key",
+        "deprecated": false,
+        "description": "Add a new SSH public key for current user",
+        "operationId": "postMesshkeyadd",
+        "tags": [
+          "User",
+          "SSH"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "public_key"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Key name/label",
+                    "examples": [
+                      "my-laptop"
+                    ]
+                  },
+                  "public_key": {
+                    "type": "string",
+                    "description": "SSH public key content",
+                    "examples": [
+                      "ssh-rsa AAAAB3NzaC1..."
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "SSH key added successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "Invalid public key format",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/me/sshkey/delete": {
+      "post": {
+        "summary": "Delete SSH public key",
+        "deprecated": false,
+        "description": "Remove an SSH public key from current user",
+        "operationId": "postMesshkeydelete",
+        "tags": [
+          "User",
+          "SSH"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "description": "SSH key ID",
+                    "examples": [
+                      1
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "SSH key deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "404": {
+            "description": "SSH key not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/user/list": {
+      "get": {
+        "summary": "List all users (Admin)",
+        "deprecated": false,
+        "description": "Get paginated list of all users",
+        "operationId": "getAdminuserlist",
+        "tags": [
+          "Admin",
+          "User"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Users list retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsersListResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "403": {
+            "description": "Forbidden - Admin role required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/user/get": {
+      "get": {
+        "summary": "Get user by ID (Admin)",
+        "deprecated": false,
+        "description": "Retrieve specific user information",
+        "operationId": "getAdminuserget",
+        "tags": [
+          "Admin",
+          "User"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User info retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "404": {
+            "description": "User not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/user/create": {
+      "post": {
+        "summary": "Create new user (Admin)",
+        "deprecated": false,
+        "description": "Create a new user account",
+        "operationId": "postAdminusercreate",
+        "tags": [
+          "Admin",
+          "User"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username",
+                  "password"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "examples": [
+                      "newuser"
+                    ]
+                  },
+                  "password": {
+                    "type": "string",
+                    "examples": [
+                      "password123"
+                    ]
+                  },
+                  "base_path": {
+                    "type": "string",
+                    "default": "/"
+                  },
+                  "role": {
+                    "type": "integer",
+                    "description": "0=General, 1=Guest, 2=Admin",
+                    "default": 0
+                  },
+                  "permission": {
+                    "type": "integer",
+                    "description": "Permission bitmap",
+                    "default": 0
+                  },
+                  "disabled": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "User created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "Invalid request or username already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/user/update": {
+      "post": {
+        "summary": "Update user (Admin)",
+        "deprecated": false,
+        "description": "Update user information",
+        "operationId": "postAdminuserupdate",
+        "tags": [
+          "Admin",
+          "User"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer"
+                  },
+                  "username": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "base_path": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "type": "integer"
+                  },
+                  "permission": {
+                    "type": "integer"
+                  },
+                  "disabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "User updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "404": {
+            "description": "User not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/user/delete": {
+      "post": {
+        "summary": "Delete user (Admin)",
+        "deprecated": false,
+        "description": "Delete a user account",
+        "operationId": "postAdminuserdelete",
+        "tags": [
+          "Admin",
+          "User"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "description": "User ID to delete"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "User deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "Cannot delete admin user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/user/cancel_2fa": {
+      "post": {
+        "summary": "Cancel user 2FA (Admin)",
+        "deprecated": false,
+        "description": "Disable 2FA for a specific user",
+        "operationId": "postAdminusercancel_2fa",
+        "tags": [
+          "Admin",
+          "User"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "description": "User ID"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "2FA cancelled successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/user/del_cache": {
+      "post": {
+        "summary": "Clear user cache (Admin)",
+        "deprecated": false,
+        "description": "Clear cached data for a specific user",
+        "operationId": "postAdminuserdel_cache",
+        "tags": [
+          "Admin",
+          "User"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "User cache cleared",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/user/sshkey/list": {
+      "get": {
+        "summary": "List user SSH keys (Admin)",
+        "deprecated": false,
+        "description": "Get SSH keys for any user",
+        "operationId": "getAdminusersshkeylist",
+        "tags": [
+          "Admin",
+          "User",
+          "SSH"
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "description": "",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SSH keys retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {}
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/user/sshkey/delete": {
+      "post": {
+        "summary": "Delete user SSH key (Admin)",
+        "deprecated": false,
+        "description": "Delete SSH key for any user",
+        "operationId": "postAdminusersshkeydelete",
+        "tags": [
+          "Admin",
+          "User",
+          "SSH"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "description": "SSH key ID"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "SSH key deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/storage/list": {
+      "get": {
+        "summary": "List all storages (Admin)",
+        "deprecated": false,
+        "description": "Get list of all configured storage mounts",
+        "operationId": "getAdminstoragelist",
+        "tags": [
+          "Admin",
+          "Storage"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Storages list retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoragesListResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "403": {
+            "description": "Forbidden - Admin required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/storage/get": {
+      "get": {
+        "summary": "Get storage by ID (Admin)",
+        "deprecated": false,
+        "description": "Retrieve specific storage configuration",
+        "operationId": "getAdminstorageget",
+        "tags": [
+          "Admin",
+          "Storage"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "description": "",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Storage info retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "404": {
+            "description": "Storage not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/storage/create": {
+      "post": {
+        "summary": "Create storage (Admin)",
+        "deprecated": false,
+        "description": "Add a new storage mount",
+        "operationId": "postAdminstoragecreate",
+        "tags": [
+          "Admin",
+          "Storage"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "mount_path",
+                  "driver"
+                ],
+                "properties": {
+                  "mount_path": {
+                    "type": "string",
+                    "examples": [
+                      "/local"
+                    ]
+                  },
+                  "driver": {
+                    "type": "string",
+                    "examples": [
+                      "Local"
+                    ]
+                  },
+                  "order": {
+                    "type": "integer",
+                    "default": 0
+                  },
+                  "cache_expiration": {
+                    "type": "integer",
+                    "default": 30
+                  },
+                  "addition": {
+                    "type": "string",
+                    "description": "Driver-specific config (JSON string)"
+                  },
+                  "remark": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Storage created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "Invalid configuration or mount path already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/storage/update": {
+      "post": {
+        "summary": "Update storage (Admin)",
+        "deprecated": false,
+        "description": "Modify existing storage configuration",
+        "operationId": "postAdminstorageupdate",
+        "tags": [
+          "Admin",
+          "Storage"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "id"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  {
+                    "$ref": "#/components/schemas/Storage"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Storage updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "404": {
+            "description": "Storage not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/storage/delete": {
+      "post": {
+        "summary": "Delete storage (Admin)",
+        "deprecated": false,
+        "description": "Remove a storage mount",
+        "operationId": "postAdminstoragedelete",
+        "tags": [
+          "Admin",
+          "Storage"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Storage deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/storage/enable": {
+      "post": {
+        "summary": "Enable storage (Admin)",
+        "deprecated": false,
+        "description": "Enable a disabled storage mount",
+        "operationId": "postAdminstorageenable",
+        "tags": [
+          "Admin",
+          "Storage"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Storage enabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/storage/disable": {
+      "post": {
+        "summary": "Disable storage (Admin)",
+        "deprecated": false,
+        "description": "Temporarily disable a storage mount",
+        "operationId": "postAdminstoragedisable",
+        "tags": [
+          "Admin",
+          "Storage"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Storage disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/storage/load_all": {
+      "post": {
+        "summary": "Reload all storages (Admin)",
+        "deprecated": false,
+        "description": "Force reload all storage mounts",
+        "operationId": "postAdminstorageload_all",
+        "tags": [
+          "Admin",
+          "Storage"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Storages reloaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/driver/list": {
+      "get": {
+        "summary": "List all drivers (Admin)",
+        "deprecated": false,
+        "description": "Get list of available storage drivers with their configurations",
+        "operationId": "getAdmindriverlist",
+        "tags": [
+          "Admin",
+          "Storage"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Drivers list retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/DriverInfo"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/driver/names": {
+      "get": {
+        "summary": "Get driver names (Admin)",
+        "deprecated": false,
+        "description": "Get list of available driver names",
+        "operationId": "getAdmindrivernames",
+        "tags": [
+          "Admin",
+          "Storage"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Driver names retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "examples": [
+                            [
+                              "Local",
+                              "AliyunDrive",
+                              "OneDrive",
+                              "S3"
+                            ]
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/driver/info": {
+      "get": {
+        "summary": "Get driver info (Admin)",
+        "deprecated": false,
+        "description": "Get configuration schema for a specific driver",
+        "operationId": "getAdmindriverinfo",
+        "tags": [
+          "Admin",
+          "Storage"
+        ],
+        "parameters": [
+          {
+            "name": "driver",
+            "in": "query",
+            "description": "",
+            "required": true,
+            "example": "Local",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Driver info retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/DriverInfo"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          },
+          "404": {
+            "description": "Driver not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/setting/list": {
+      "get": {
+        "summary": "List all settings (Admin)",
+        "deprecated": false,
+        "description": "Get all system settings",
+        "operationId": "getAdminsettinglist",
+        "tags": [
+          "Admin",
+          "Settings"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Settings list retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "key": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "options": {
+                                "type": "string"
+                              },
+                              "group": {
+                                "type": "integer"
+                              },
+                              "flag": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/setting/get": {
+      "get": {
+        "summary": "Get setting by key (Admin)",
+        "deprecated": false,
+        "description": "Retrieve a specific setting value",
+        "operationId": "getAdminsettingget",
+        "tags": [
+          "Admin",
+          "Settings"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "query",
+            "description": "",
+            "required": true,
+            "example": "site_title",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Setting retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {}
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/setting/save": {
+      "post": {
+        "summary": "Save settings (Admin)",
+        "deprecated": false,
+        "description": "Update one or more system settings",
+        "operationId": "postAdminsettingsave",
+        "tags": [
+          "Admin",
+          "Settings"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Settings saved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/setting/delete": {
+      "post": {
+        "summary": "Delete setting (Admin)",
+        "deprecated": false,
+        "description": "Remove a custom setting",
+        "operationId": "postAdminsettingdelete",
+        "tags": [
+          "Admin",
+          "Settings"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "key"
+                ],
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Setting deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/setting/reset_token": {
+      "post": {
+        "summary": "Reset API token (Admin)",
+        "deprecated": false,
+        "description": "Generate a new API token",
+        "operationId": "postAdminsettingreset_token",
+        "tags": [
+          "Admin",
+          "Settings"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Token reset successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/meta/list": {
+      "get": {
+        "summary": "List all metas (Admin)",
+        "deprecated": false,
+        "description": "Get list of metadata configurations",
+        "operationId": "getAdminmetalist",
+        "tags": [
+          "Admin",
+          "Meta"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Metas list retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {}
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/meta/get": {
+      "get": {
+        "summary": "Get meta by ID (Admin)",
+        "deprecated": false,
+        "description": "Retrieve specific metadata configuration",
+        "operationId": "getAdminmetaget",
+        "tags": [
+          "Admin",
+          "Meta"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "description": "",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Meta retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/meta/create": {
+      "post": {
+        "summary": "Create meta (Admin)",
+        "deprecated": false,
+        "description": "Add new metadata configuration",
+        "operationId": "postAdminmetacreate",
+        "tags": [
+          "Admin",
+          "Meta"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "path"
+                ],
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "readme": {
+                    "type": "string"
+                  },
+                  "header": {
+                    "type": "string"
+                  },
+                  "hide": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Meta created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/meta/update": {
+      "post": {
+        "summary": "Update meta (Admin)",
+        "deprecated": false,
+        "description": "Modify metadata configuration",
+        "operationId": "postAdminmetaupdate",
+        "tags": [
+          "Admin",
+          "Meta"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "readme": {
+                    "type": "string"
+                  },
+                  "header": {
+                    "type": "string"
+                  },
+                  "hide": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Meta updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/meta/delete": {
+      "post": {
+        "summary": "Delete meta (Admin)",
+        "deprecated": false,
+        "description": "Remove metadata configuration",
+        "operationId": "postAdminmetadelete",
+        "tags": [
+          "Admin",
+          "Meta"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Meta deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/index/build": {
+      "post": {
+        "summary": "Build search index (Admin)",
+        "deprecated": false,
+        "description": "Build full-text search index for all storages",
+        "operationId": "postAdminindexbuild",
+        "tags": [
+          "Admin",
+          "Search Index"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Index build started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/index/update": {
+      "post": {
+        "summary": "Update search index (Admin)",
+        "deprecated": false,
+        "description": "Update search index for specific paths",
+        "operationId": "postAdminindexupdate",
+        "tags": [
+          "Admin",
+          "Search Index"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Index update started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/index/stop": {
+      "post": {
+        "summary": "Stop indexing (Admin)",
+        "deprecated": false,
+        "description": "Stop current indexing operation",
+        "operationId": "postAdminindexstop",
+        "tags": [
+          "Admin",
+          "Search Index"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Indexing stopped",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/index/clear": {
+      "post": {
+        "summary": "Clear search index (Admin)",
+        "deprecated": false,
+        "description": "Delete all search index data",
+        "operationId": "postAdminindexclear",
+        "tags": [
+          "Admin",
+          "Search Index"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Index cleared",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/index/progress": {
+      "get": {
+        "summary": "Get indexing progress (Admin)",
+        "deprecated": false,
+        "description": "Check current indexing operation progress",
+        "operationId": "getAdminindexprogress",
+        "tags": [
+          "Admin",
+          "Search Index"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Progress retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "total": {
+                              "type": "integer"
+                            },
+                            "current": {
+                              "type": "integer"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/list": {
+      "post": {
+        "summary": "List directory contents",
+        "deprecated": false,
+        "description": "Get list of files and directories at specified path with pagination",
+        "operationId": "postFslist",
+        "tags": [
+          "File System"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FsListRequest"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/FsListRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Directory listing retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FsListResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "403": {
+            "description": "Forbidden - insufficient permissions or wrong password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "404": {
+            "description": "Path not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/get": {
+      "post": {
+        "summary": "Get file or directory info",
+        "deprecated": false,
+        "description": "Retrieve metadata for a specific file or directory",
+        "operationId": "postFsget",
+        "tags": [
+          "File System"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FsGetRequest"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/FsGetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "File/directory info retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FsGetResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "404": {
+            "description": "File not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/search": {
+      "post": {
+        "summary": "Search files and directories",
+        "deprecated": false,
+        "description": "Search for files/folders by name (requires search index to be built)",
+        "operationId": "postFssearch",
+        "tags": [
+          "File System"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "parent",
+                  "keywords"
+                ],
+                "properties": {
+                  "parent": {
+                    "type": "string",
+                    "description": "Base path to search within",
+                    "examples": [
+                      "/"
+                    ]
+                  },
+                  "keywords": {
+                    "type": "string",
+                    "description": "Search query",
+                    "examples": [
+                      "document"
+                    ]
+                  },
+                  "scope": {
+                    "type": "integer",
+                    "description": "Search scope (0=current folder, 1=recursive)",
+                    "default": 0
+                  },
+                  "page": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 1
+                  },
+                  "per_page": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 30
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "content": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/FsObject"
+                              }
+                            },
+                            "total": {
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "Search index not enabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/dirs": {
+      "post": {
+        "summary": "Get directory tree",
+        "deprecated": false,
+        "description": "Retrieve directory structure (folders only) for navigation",
+        "operationId": "postFsdirs",
+        "tags": [
+          "File System"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "default": "/"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "force_root": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Directory tree retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/other": {
+      "post": {
+        "summary": "Get additional file operations",
+        "deprecated": false,
+        "description": "Retrieve provider-specific operations available for a file/folder",
+        "operationId": "postFsother",
+        "tags": [
+          "File System"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "path"
+                ],
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "examples": [
+                      "/file.txt"
+                    ]
+                  },
+                  "method": {
+                    "type": "string",
+                    "description": "Operation method name"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Operations retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/mkdir": {
+      "post": {
+        "summary": "Create directory",
+        "deprecated": false,
+        "description": "Create a new directory at specified path",
+        "operationId": "postFsmkdir",
+        "tags": [
+          "File System"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FsMkdirRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Directory created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "Invalid path or directory already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "403": {
+            "description": "Insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/rename": {
+      "post": {
+        "summary": "Rename file or directory",
+        "deprecated": false,
+        "description": "Rename a file or directory",
+        "operationId": "postFsrename",
+        "tags": [
+          "File System"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FsRenameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Renamed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "403": {
+            "description": "Insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/batch_rename": {
+      "post": {
+        "summary": "Batch rename files",
+        "deprecated": false,
+        "description": "Rename multiple files using a pattern",
+        "operationId": "postFsbatch_rename",
+        "tags": [
+          "File System"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "src_dir",
+                  "rename_objects"
+                ],
+                "properties": {
+                  "src_dir": {
+                    "type": "string",
+                    "description": "Source directory",
+                    "examples": [
+                      "/folder"
+                    ]
+                  },
+                  "rename_objects": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "src_name": {
+                          "type": "string"
+                        },
+                        "new_name": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Batch rename completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/regex_rename": {
+      "post": {
+        "summary": "Regex-based rename",
+        "deprecated": false,
+        "description": "Rename files using regular expression pattern matching",
+        "operationId": "postFsregex_rename",
+        "tags": [
+          "File System"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "src_dir",
+                  "src_name_regex",
+                  "new_name_regex"
+                ],
+                "properties": {
+                  "src_dir": {
+                    "type": "string",
+                    "examples": [
+                      "/folder"
+                    ]
+                  },
+                  "src_name_regex": {
+                    "type": "string",
+                    "description": "Source name regex pattern",
+                    "examples": [
+                      "^(.*)\\.(txt)$"
+                    ]
+                  },
+                  "new_name_regex": {
+                    "type": "string",
+                    "description": "Replacement pattern",
+                    "examples": [
+                      "$1_renamed.$2"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Regex rename completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/move": {
+      "post": {
+        "summary": "Move files or directories",
+        "deprecated": false,
+        "description": "Move one or more files/folders to another location",
+        "operationId": "postFsmove",
+        "tags": [
+          "File System"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FsMoveCopyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Moved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "403": {
+            "description": "Insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/recursive_move": {
+      "post": {
+        "summary": "Recursive move",
+        "deprecated": false,
+        "description": "Move files/folders recursively (preserves directory structure)",
+        "operationId": "postFsrecursive_move",
+        "tags": [
+          "File System"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "src_dir",
+                  "dst_dir"
+                ],
+                "properties": {
+                  "src_dir": {
+                    "type": "string",
+                    "examples": [
+                      "/source"
+                    ]
+                  },
+                  "dst_dir": {
+                    "type": "string",
+                    "examples": [
+                      "/destination"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Recursive move completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/copy": {
+      "post": {
+        "summary": "Copy files or directories",
+        "deprecated": false,
+        "description": "Copy one or more files/folders to another location",
+        "operationId": "postFscopy",
+        "tags": [
+          "File System"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FsMoveCopyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Copied successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "403": {
+            "description": "Insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/remove": {
+      "post": {
+        "summary": "Remove files or directories",
+        "deprecated": false,
+        "description": "Delete one or more files or folders",
+        "operationId": "postFsremove",
+        "tags": [
+          "File System"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FsRemoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Removed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "403": {
+            "description": "Insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/remove_empty_directory": {
+      "post": {
+        "summary": "Remove empty directories",
+        "deprecated": false,
+        "description": "Recursively remove empty directories",
+        "operationId": "postFsremove_empty_directory",
+        "tags": [
+          "File System"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "src_dir"
+                ],
+                "properties": {
+                  "src_dir": {
+                    "type": "string",
+                    "description": "Starting directory path",
+                    "examples": [
+                      "/folder"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Empty directories removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/put": {
+      "put": {
+        "summary": "Upload file (stream)",
+        "deprecated": false,
+        "description": "Upload file using streaming (for large files or programmatic uploads)",
+        "operationId": "putFsput",
+        "tags": [
+          "File System"
+        ],
+        "parameters": [
+          {
+            "name": "File-Path",
+            "in": "header",
+            "description": "Destination file path",
+            "required": true,
+            "example": "",
+            "schema": {
+              "type": "string",
+              "examples": [
+                "/uploads/file.pdf"
+              ]
+            }
+          },
+          {
+            "name": "As-Task",
+            "in": "header",
+            "description": "Upload as background task (true/false)",
+            "required": false,
+            "example": "",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "Overwrite",
+            "in": "header",
+            "description": "Allow Overwrite (`true` by default)",
+            "required": false,
+            "example": "",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Last-Modified",
+            "in": "header",
+            "description": "File modification time (Unix timestamp in milliseconds)",
+            "required": false,
+            "example": "",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-File-Md5",
+            "in": "header",
+            "description": "MD5 of file",
+            "required": false,
+            "example": "",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-File-Sha1",
+            "in": "header",
+            "description": "SHA1 of file",
+            "required": false,
+            "example": "",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-File-Sha256",
+            "in": "header",
+            "description": "SHA256 of file",
+            "required": false,
+            "example": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              },
+              "examples": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Upload successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "403": {
+            "description": "Insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/form": {
+      "put": {
+        "summary": "Upload file (form)",
+        "deprecated": false,
+        "description": "Upload file using multipart form data (for browser uploads)",
+        "operationId": "putFsform",
+        "tags": [
+          "File System"
+        ],
+        "parameters": [
+          {
+            "name": "File-Path",
+            "in": "header",
+            "description": "Destination file path",
+            "required": true,
+            "example": "",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "As-Task",
+            "in": "header",
+            "description": "Upload as background task (true/false)",
+            "required": false,
+            "example": "",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "Overwrite",
+            "in": "header",
+            "description": "Allow Overwrite (`true` by default)",
+            "required": false,
+            "example": "",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "Last-Modified",
+            "in": "header",
+            "description": "File modification time (Unix timestamp in milliseconds)",
+            "required": false,
+            "example": "",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-File-Md5",
+            "in": "header",
+            "description": "MD5 of file",
+            "required": false,
+            "example": "",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-File-Sha1",
+            "in": "header",
+            "description": "SHA1 of file",
+            "required": false,
+            "example": "",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-File-Sha256",
+            "in": "header",
+            "description": "SHA256 of file",
+            "required": false,
+            "example": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "File to upload",
+                    "example": ""
+                  }
+                }
+              },
+              "example": {
+                "file": ""
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Upload successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "403": {
+            "description": "Insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/add_offline_download": {
+      "post": {
+        "summary": "Add offline download task",
+        "deprecated": false,
+        "description": "Create an offline download task (HTTP/magnet/torrent)",
+        "operationId": "postFsadd_offline_download",
+        "tags": [
+          "File System",
+          "Offline Download"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "path",
+                  "urls"
+                ],
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Destination path to save downloaded files",
+                    "examples": [
+                      "/downloads"
+                    ]
+                  },
+                  "urls": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "List of URLs to download (HTTP/HTTPS/magnet)",
+                    "examples": [
+                      [
+                        "https://example.com/file.zip"
+                      ]
+                    ]
+                  },
+                  "tool": {
+                    "type": "string",
+                    "description": "Preferred download tool (aria2/qbittorrent/transmission)",
+                    "examples": [
+                      "aria2"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Download task created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "Invalid request or offline download not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/archive/decompress": {
+      "post": {
+        "summary": "Decompress archive",
+        "deprecated": false,
+        "description": "Extract archive file (zip/rar/7z/tar/tar.gz etc.)",
+        "operationId": "postFsarchivedecompress",
+        "tags": [
+          "File System",
+          "Archive"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "src_dir",
+                  "name",
+                  "dst_dir"
+                ],
+                "properties": {
+                  "src_dir": {
+                    "type": "string",
+                    "description": "Directory containing the archive",
+                    "examples": [
+                      "/archives"
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "Archive filename",
+                    "examples": [
+                      "archive.zip"
+                    ]
+                  },
+                  "dst_dir": {
+                    "type": "string",
+                    "description": "Destination directory for extraction",
+                    "examples": [
+                      "/extracted"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Decompression started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "403": {
+            "description": "Insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/archive/meta": {
+      "post": {
+        "summary": "Get archive metadata",
+        "deprecated": false,
+        "description": "Retrieve metadata of archive file without extracting",
+        "operationId": "postFsarchivemeta",
+        "tags": [
+          "File System",
+          "Archive"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "path"
+                ],
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "examples": [
+                      "/archive.zip"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Archive metadata retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "format": {
+                              "type": "string",
+                              "examples": [
+                                "zip"
+                              ]
+                            },
+                            "encrypted": {
+                              "type": "boolean"
+                            },
+                            "total_files": {
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/fs/archive/list": {
+      "post": {
+        "summary": "List archive contents",
+        "deprecated": false,
+        "description": "List files inside an archive without extracting",
+        "operationId": "postFsarchivelist",
+        "tags": [
+          "File System",
+          "Archive"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "path"
+                ],
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Path to archive file",
+                    "examples": [
+                      "/archive.zip"
+                    ]
+                  },
+                  "archive_path": {
+                    "type": "string",
+                    "description": "Path inside archive",
+                    "default": "/"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Archive contents listed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "content": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/FsObject"
+                              }
+                            },
+                            "total": {
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/public/settings": {
+      "get": {
+        "summary": "Get public settings",
+        "deprecated": false,
+        "description": "Retrieve public system settings (no authentication required)",
+        "operationId": "getPublicsettings",
+        "tags": [
+          "Public",
+          "Settings"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Public settings retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          },
+                          "description": "Key-value pairs of public settings",
+                          "properties": {}
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/public/offline_download_tools": {
+      "get": {
+        "summary": "Get available offline download tools",
+        "deprecated": false,
+        "description": "List configured offline download tools (aria2, qbittorrent, etc.)",
+        "operationId": "getPublicoffline_download_tools",
+        "tags": [
+          "Public"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Available tools retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "examples": [
+                            [
+                              "aria2",
+                              "qbittorrent"
+                            ]
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/public/archive_extensions": {
+      "get": {
+        "summary": "Get supported archive extensions",
+        "deprecated": false,
+        "description": "List archive file extensions that can be extracted",
+        "operationId": "getPublicarchive_extensions",
+        "tags": [
+          "Public"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Archive extensions retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "examples": [
+                            [
+                              ".zip",
+                              ".rar",
+                              ".7z",
+                              ".tar",
+                              ".tar.gz"
+                            ]
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/share/list": {
+      "post": {
+        "summary": "List all shares",
+        "deprecated": false,
+        "description": "Get paginated list of file shares created by current user",
+        "operationId": "postSharelist",
+        "tags": [
+          "Sharing"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PageReq"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Shares list retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "content": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "expiration": {
+                                    "type": "string",
+                                    "format": "date-time"
+                                  },
+                                  "created_at": {
+                                    "type": "string",
+                                    "format": "date-time"
+                                  }
+                                }
+                              }
+                            },
+                            "total": {
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/share/get": {
+      "get": {
+        "summary": "Get share by ID",
+        "deprecated": false,
+        "description": "Retrieve specific share information",
+        "operationId": "getShareget",
+        "tags": [
+          "Sharing"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "description": "Share ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Share info retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "path": {
+                              "type": "string"
+                            },
+                            "password": {
+                              "type": "string"
+                            },
+                            "expiration": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "created_at": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/share/create": {
+      "post": {
+        "summary": "Create file share",
+        "deprecated": false,
+        "description": "Create a new shareable link for files/folders",
+        "operationId": "postSharecreate",
+        "tags": [
+          "Sharing"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "paths"
+                ],
+                "properties": {
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "List of file/folder paths to share",
+                    "examples": [
+                      [
+                        "/document.pdf",
+                        "/folder"
+                      ]
+                    ]
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "Optional password protection",
+                    "examples": [
+                      ""
+                    ]
+                  },
+                  "expiration": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Optional expiration date",
+                    "examples": [
+                      "2025-12-31T23:59:59Z"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Share created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "description": "Share ID"
+                            },
+                            "url": {
+                              "type": "string",
+                              "description": "Share URL"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          },
+          "403": {
+            "description": "Insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/share/update": {
+      "post": {
+        "summary": "Update share",
+        "deprecated": false,
+        "description": "Modify existing share configuration",
+        "operationId": "postShareupdate",
+        "tags": [
+          "Sharing"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "expiration": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Share updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/share/delete": {
+      "post": {
+        "summary": "Delete share",
+        "deprecated": false,
+        "description": "Remove a file share",
+        "operationId": "postSharedelete",
+        "tags": [
+          "Sharing"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "description": "Share ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Share deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/share/enable": {
+      "post": {
+        "summary": "Enable share",
+        "deprecated": false,
+        "description": "Re-enable a disabled share",
+        "operationId": "postShareenable",
+        "tags": [
+          "Sharing"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "description": "Share ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Share enabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/share/disable": {
+      "post": {
+        "summary": "Disable share",
+        "deprecated": false,
+        "description": "Temporarily disable a share",
+        "operationId": "postSharedisable",
+        "tags": [
+          "Sharing"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "description": "Share ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Share disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/@file/{action}/{method}/{source}": {
+      "get": {
+        "summary": "文件操作接口",
+        "deprecated": false,
+        "description": "## 接口用途\n负责和后端文件系统对接\n\n## 接口示例\n### 列出目录\n\n| 示例操作                           | 含义                                          |\n| :--------------------------------- | :-------------------------------------------- |\n| `/@file/list/uuid/123456?driver=0` | 以`UUID`方式列出`UUID`为`12345`的目录下的文件 |\n| `/@file/list/path/path1/sub_path/` | 列出`/path1/sub_path/`路径的目录下的文件      |\n\n### 获取链接\n\n| 示例操作                           | 含义                                      |\n| :--------------------------------- | :---------------------------------------- |\n| `/@file/link/uuid/123456?driver=0` | 以`UUID`方式获取`UUID`为`12345`的文件地址 |\n| `/@file/link/path/path1/file1.mp4` | 获取`/path1/file1.mp4`路径的文件下载URL   |\n\n### 复制文件(夹)\n\n| 示例操作                                                | 含义                                                         |\n| :------------------------------------------------------ | :----------------------------------------------------------- |\n| `/@file/copy/uuid/123456?driver=0&target=/path/path2/`  | 以`UUID`方式复制`UUID`为`12345`的文件到`/path2/`             |\n| `/@file/copy/path/path1/file1.mp4&target=/uuid/789456/` | 复制`/path1/file1.mp4`路径的文件到按`UUID`为`789456`的目录 下 |\n\n### 移动文件(夹)\n\n| 示例操作                                                | 含义                                                         |\n| :------------------------------------------------------ | :----------------------------------------------------------- |\n| `/@file/move/uuid/123456?driver=0&target=/path/path2/`  | 以`UUID`方式移动`UUID`为`12345`的文件到`/path2/`             |\n| `/@file/move/uuid/123456?driver=0&target=/uuid/789456/` | 以`UUID`方式移动`UUID`为`12345`的文件到按`UUID`为`789456`的目录 下 |\n| `/@file/move/path/path1/file1.mp4&target=/path/path2/`  | 移动`/path1/file1.mp4`路径的文件到`/path2/`                  |\n| `/@file/move/path/path1/file1.mp4&target=/uuid/789456/` | 移动`/path1/file1.mp4`路径的文件到按`UUID`为`789456`的目录 下 |\n\n### 创建文件(夹)\n\n| 示例操作                                                    | 含义                                                      |\n| :---------------------------------------------------------- | :-------------------------------------------------------- |\n| `/@file/create/uuid/123456?driver=0&target=/path/path2/`    | 以`UUID`方式在`UUID`为`12345`的文件夹下创建`path2`文件夹  |\n| `/@file/create/uuid/123456?driver=0&target=/file/file.mp4/` | 以`UUID`方式在`UUID`为`12345`的文件夹下创建`file.mp4`文件 |\n| `/@file/create/path/path1/&target=/path/path2/`             | 在`/path1/`路径下创建`path2`文件夹                        |\n| `/@file/create/path/path1/&target=/file/file.mp4/`          | 在`/path1/`路径下创建`file.mp4`文件                       |\n\n### 删除文件(夹)\n\n| 示例操作                             | 含义                                  |\n| :----------------------------------- | :------------------------------------ |\n| `/@file/remove/uuid/123456?driver=0` | 以`UUID`方式删除`UUID`为`12345`的文件 |\n| `/@file/remove/path/path1/file1.mp4` | 删除`/path1/file1.mp4`路径的文件      |\n\n### 配置文件(夹)\n\n| 示例操作                                          | 含义                                                         |\n| :------------------------------------------------ | :----------------------------------------------------------- |\n| `/@file/config/uuid/123456?driver=0&config={...}` | 以`UUID`方式管理`UUID`为`12345`的文件的元信息，管理内容是`{...}` |\n| `/@file/config/path/path1/file1.mp4?config={...}` | 管理`/path1/file1.mp4`路径的文件的元信息，管理内容是`{...}`  |\n\n### 分享文件(夹)\n\n| 示例操作                                          | 含义                                                         |\n| :------------------------------------------------ | :----------------------------------------------------------- |\n| `/@file/shared/uuid/123456?driver=0&config={...}`  | 以`UUID`方式创建/管理分享`UUID`为`12345`的文件，分享配置内容是`{...}` |\n| `/@file/shared/path/path1/file1.mp4?config={...}` | 创建/管理分享`/path1/file1.mp4`路径的文件，分享配置内容是`{...}` |\n",
+        "tags": [
+          "TS版本接口"
+        ],
+        "parameters": [
+          {
+            "name": "action",
+            "in": "path",
+            "description": "必要：请求操作，列出文件(路径)、获取下载链接、复制文件、移动文件、创建文件(夹)、配置路径、分享管理",
+            "required": true,
+            "example": "list、link、copy、move、remove、create、config、shared",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "method",
+            "in": "path",
+            "description": "必要：筛选方法，路径筛选(path)、UUID筛选(uuid)、不筛选(none)、创建文件夹（path）、创建文件（file）",
+            "required": true,
+            "example": "path、uuid、none、file",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "in": "path",
+            "description": "可选：筛选信息，指定路径(/../)、UUID(0EOJQGLO)、不筛选(<空>)",
+            "required": true,
+            "example": "path1/、0EOJQGLO",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "description": "可选：移动、复制目标路径、创建文件的/文件(夹)名",
+            "required": false,
+            "example": "path2/",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "driver",
+            "in": "query",
+            "description": "可选：当`method`参数为`uuid`时，需要指定驱动UUID",
+            "required": false,
+            "example": "0",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "config",
+            "in": "query",
+            "description": "可选：配置元信息、分享文件、手动解密需要提交内容",
+            "required": false,
+            "example": "{}",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "files": {
+                    "description": "上传的文件",
+                    "example": "二进制文件",
+                    "type": "string"
+                  },
+                  "config": {
+                    "description": "上传的配置",
+                    "example": "{...}",
+                    "type": "string"
+                  }
+                }
+              },
+              "example": {
+                "files": "二进制文件",
+                "config": "{...}"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/@user/{action}/{method}/{select}": {
+      "get": {
+        "summary": "用户操作接口",
+        "deprecated": false,
+        "description": "## 接口用途\n负责用户部分的管理\n\n## 接口示例\n\n### 列出用户\n\n| 示例操作                    | 含义                          |\n| :-------------------------- | :---------------------------- |\n| `/@user/select/none/`       | 查找并列出所有的用户信息      |\n| `/@user/select/uuid/12345/` | 查找并列出`ID12345`的用户信息 |\n\n\n### 创建用户\n\n| 示例操作                           | 含义                            |\n| :--------------------------------- | :------------------------------ |\n| `/@user/create/none/?config={...}` | 创建一个用户，并返回用户的 UUID |\n\n### 删除用户\n\n| 示例操作                    | 含义                          |\n| :-------------------------- | :---------------------------- |\n| `/@user/remove/uuid/12345/` | 删除`ID12345`挂载 |\n\n\n### 修改用户\n\n| 示例操作                    | 含义                          |\n| :-------------------------- | :---------------------------- |\n| `/@user/reload/uuid/12345/?config={...}` | 修改`ID12345`用户 |\n\n\n### 登录用户\n\n| 示例操作                    | 含义                          |\n| :-------------------------- | :---------------------------- |\n| `/@user/login/none/?config={...}` | 登录用户 |\n\n### 登出用户\n\n| 示例操作                    | 含义                          |\n| :-------------------------- | :---------------------------- |\n| `/@user/logout/none/` | 登出用户 |",
+        "tags": [
+          "TS版本接口"
+        ],
+        "parameters": [
+          {
+            "name": "action",
+            "in": "path",
+            "description": "用户操作，创建、查找、删除、配置、登录、退出",
+            "required": true,
+            "example": "create、select、remove、config、login、logout",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "method",
+            "in": "path",
+            "description": "筛选方式，UUID（查找、删除、配置）、不筛选（查找、登录、退出）",
+            "required": true,
+            "example": "uuid、none",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "select",
+            "in": "path",
+            "description": "用户UUID，可以为空",
+            "required": true,
+            "example": "12345、<空>",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "config",
+            "in": "query",
+            "description": "配置信息，参考Body参数配置",
+            "required": false,
+            "example": "{...}",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              },
+              "examples": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    },
+    "/@path/{action}/{method}/{driver}": {
+      "get": {
+        "summary": "挂载管理接口",
+        "deprecated": false,
+        "description": "## 接口用途\n负责挂载部分的管理\n\n## 接口示例\n\n### 列出挂载\n\n| 示例操作                    | 含义                          |\n| :-------------------------- | :---------------------------- |\n| `/@path/select/none/`       | 查找并列出所有的挂载信息      |\n| `/@path/select/path/path1/` | 查找并列出`/path1/`的挂载信息 |\n| `/@path/select/uuid/12345/` | 查找并列出`ID12345`的挂载信息 |\n\n\n### 创建挂载\n\n| 示例操作                                 | 含义                                            |\n| :--------------------------------------- | :---------------------------------------------- |\n| `/@path/create/path/path1/?config={...}` | 创建一个`/path1/`的挂载信息，此路径必须是唯一的 |\n\n### 删除挂载\n\n| 示例操作                    | 含义                          |\n| :-------------------------- | :---------------------------- |\n| `/@path/remove/path/path1/` | 删除 `/path1/`挂载 |\n| `/@path/remove/uuid/12345/` | 删除`ID12345`挂载 |\n\n### 载入挂载\n\n| 示例操作                    | 含义                          |\n| :-------------------------- | :---------------------------- |\n| `/@path/reload/path/path1/` | 载入 `/path1/`挂载 |\n| `/@path/reload/uuid/12345/` | 载入`ID12345`挂载 |\n\n### 修改挂载\n\n| 示例操作                    | 含义                          |\n| :-------------------------- | :---------------------------- |\n| `/@path/reload/path/path1/?config={...}` | 修改 `/path1/`挂载 |\n| `/@path/reload/uuid/12345/?config={...}` | 修改`ID12345`挂载 |",
+        "tags": [
+          "TS版本接口"
+        ],
+        "parameters": [
+          {
+            "name": "action",
+            "in": "path",
+            "description": "必要：驱动操作，创建挂载、删除挂载、载入驱动、查找驱动、配置驱动",
+            "required": true,
+            "example": "create、remove、reload、select、config",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "method",
+            "in": "path",
+            "description": "必要：筛选方式，路径path、编号uuid、不筛选none（仅限查找时使用）",
+            "required": true,
+            "example": "path、uuid、none",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "driver",
+            "in": "path",
+            "description": "必要：筛选内容，路径则使用路径定位、uuid则使用uuid定位",
+            "required": true,
+            "example": "/path1/、12345",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "config",
+            "in": "query",
+            "description": "可选：驱动配置，创建、修改时需要（GET时才需要，POST参考BODY部分）",
+            "required": false,
+            "example": "{...}",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mount_path": {
+                    "type": "string",
+                    "title": "挂载路径",
+                    "description": "挂载驱动的唯一路径"
+                  },
+                  "mount_type": {
+                    "type": "string",
+                    "title": "驱动类型",
+                    "description": "驱动类型名称"
+                  },
+                  "is_enabled": {
+                    "type": "boolean",
+                    "title": "是否启用",
+                    "description": "是否启用挂载"
+                  },
+                  "drive_conf": {
+                    "type": "string",
+                    "title": "配置信息",
+                    "description": "挂载配置信息"
+                  },
+                  "cache_time": {
+                    "type": "integer",
+                    "title": "缓存时间",
+                    "description": "全局缓存时间"
+                  }
+                },
+                "required": [
+                  "mount_path",
+                  "mount_type",
+                  "is_enabled",
+                  "drive_conf",
+                  "cache_time"
+                ]
+              },
+              "examples": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": []
+      }
+    }
+  },
+  "webhooks": {},
+  "components": {
+    "schemas": {
+      "ApiResponse": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "HTTP status code",
+            "examples": [
+              200
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "Response message",
+            "examples": [
+              "success"
+            ]
+          },
+          "data": {
+            "description": "Response payload (type varies by endpoint)"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "Error code",
+            "examples": [
+              400
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "Error message",
+            "examples": [
+              "Invalid request parameters"
+            ]
+          },
+          "data": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "examples": [
+              null
+            ],
+            "properties": {}
+          }
+        }
+      },
+      "PageReq": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Page number (1-indexed)"
+          },
+          "per_page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 30,
+            "description": "Items per page"
+          }
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "description": "Total number of items",
+            "examples": [
+              100
+            ]
+          },
+          "page": {
+            "type": "integer",
+            "description": "Current page number",
+            "examples": [
+              1
+            ]
+          },
+          "per_page": {
+            "type": "integer",
+            "description": "Items per page",
+            "examples": [
+              30
+            ]
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "User unique ID",
+            "examples": [
+              1
+            ]
+          },
+          "username": {
+            "type": "string",
+            "description": "Username",
+            "examples": [
+              "admin"
+            ]
+          },
+          "password": {
+            "type": "string",
+            "description": "Password (empty on read)",
+            "examples": [
+              ""
+            ]
+          },
+          "base_path": {
+            "type": "string",
+            "description": "User's base path",
+            "examples": [
+              "/"
+            ]
+          },
+          "role": {
+            "type": "integer",
+            "description": "User role: 0=General, 1=Guest, 2=Admin",
+            "enum": [
+              0,
+              1,
+              2
+            ],
+            "examples": [
+              2
+            ]
+          },
+          "disabled": {
+            "type": "boolean",
+            "description": "Whether the user is disabled",
+            "examples": [
+              false
+            ]
+          },
+          "permission": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Permission (in bit flags):\n- Bit 0: Can see hidden files\n- Bit 1: Can access without password\n- Bit 2: Can add offline download tasks\n- Bit 3: Can mkdir and upload\n- Bit 4: Can rename\n- Bit 5: Can move\n- Bit 6: Can copy\n- Bit 7: Can remove\n- Bit 8: WebDAV read\n- Bit 9: WebDAV write\n- Bit 10: FTP/SFTP login and read\n- Bit 11: FTP/SFTP write\n- Bit 12: Can read archives\n- Bit 13: Can decompress archives\n- Bit 14: Can share\n",
+            "examples": [
+              29183
+            ]
+          },
+          "sso_id": {
+            "type": "string",
+            "description": "SSO platform ID",
+            "examples": [
+              ""
+            ]
+          },
+          "otp": {
+            "type": "boolean",
+            "description": "Whether 2FA is enabled",
+            "examples": [
+              false
+            ]
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "username": {
+            "type": "string",
+            "examples": [
+              "admin"
+            ]
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "examples": [
+              "my password"
+            ]
+          },
+          "otp_code": {
+            "type": "string",
+            "description": "Two-factor authentication code (if 2FA is enabled)",
+            "examples": [
+              "123456"
+            ]
+          }
+        }
+      },
+      "LoginResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "description": "JWT authentication token",
+                    "examples": [
+                      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "UserResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        ]
+      },
+      "UsersListResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  },
+                  "total": {
+                    "type": "integer",
+                    "examples": [
+                      5
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "FsObject": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Object ID (may be empty for local storage)",
+            "examples": [
+              ""
+            ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Full system path",
+            "examples": [
+              "D:\\files\\document.pdf"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "File or directory name",
+            "examples": [
+              "document.pdf"
+            ]
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "description": "File size in bytes (0 for directories)",
+            "examples": [
+              1024000
+            ]
+          },
+          "is_dir": {
+            "type": "boolean",
+            "description": "Whether this is a directory",
+            "examples": [
+              false
+            ]
+          },
+          "modified": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Last modified time",
+            "examples": [
+              "2025-10-20T15:30:00+08:00"
+            ]
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Creation time",
+            "examples": [
+              "2025-10-20T10:00:00+08:00"
+            ]
+          },
+          "sign": {
+            "type": "string",
+            "description": "Signature for download authentication",
+            "examples": [
+              "YBgnmykwCXUstXvNGtECaz_12gseXSL03cpqh5rTcGA=:0"
+            ]
+          },
+          "thumb": {
+            "type": "string",
+            "description": "Thumbnail URL (if available)",
+            "examples": [
+              ""
+            ]
+          },
+          "type": {
+            "type": "integer",
+            "description": "File type:\n0=Unknown, 1=Folder, 2=Video, 3=Audio, 4=Text, 5=Image\n",
+            "examples": [
+              4
+            ]
+          },
+          "hashinfo": {
+            "type": "string",
+            "description": "Hash information (JSON string or \"null\")",
+            "examples": [
+              "null"
+            ]
+          },
+          "hash_info": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Parsed hash information",
+            "examples": [
+              null
+            ],
+            "properties": {}
+          },
+          "mount_details": {
+            "$ref": "#/components/schemas/StorageDetails"
+          }
+        }
+      },
+      "FsListRequest": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Path to list",
+            "default": "/",
+            "examples": [
+              "/"
+            ]
+          },
+          "password": {
+            "type": "string",
+            "description": "Password for protected paths",
+            "examples": [
+              ""
+            ]
+          },
+          "refresh": {
+            "type": "boolean",
+            "description": "Force refresh cache",
+            "default": false
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1
+          },
+          "per_page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 30
+          }
+        }
+      },
+      "FsListResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/FsObject"
+                    }
+                  },
+                  "total": {
+                    "type": "integer",
+                    "description": "Total number of items",
+                    "examples": [
+                      14
+                    ]
+                  },
+                  "readme": {
+                    "type": "string",
+                    "description": "README content (if exists)",
+                    "examples": [
+                      ""
+                    ]
+                  },
+                  "header": {
+                    "type": "string",
+                    "description": "Header content",
+                    "examples": [
+                      ""
+                    ]
+                  },
+                  "write": {
+                    "type": "boolean",
+                    "description": "Whether current user has write permission",
+                    "examples": [
+                      true
+                    ]
+                  },
+                  "provider": {
+                    "type": "string",
+                    "description": "Storage provider name",
+                    "examples": [
+                      "Local"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "FsGetRequest": {
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "File or directory path",
+            "examples": [
+              "/document.pdf"
+            ]
+          },
+          "password": {
+            "type": "string",
+            "description": "Password for protected paths",
+            "examples": [
+              ""
+            ]
+          }
+        }
+      },
+      "FsGetResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/FsObject"
+              }
+            }
+          }
+        ]
+      },
+      "FsMkdirRequest": {
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Path where to create directory",
+            "examples": [
+              "/newfolder"
+            ]
+          }
+        }
+      },
+      "FsRenameRequest": {
+        "type": "object",
+        "required": [
+          "path",
+          "name"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Current file/folder path",
+            "examples": [
+              "/oldname.txt"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "New name",
+            "examples": [
+              "newname.txt"
+            ]
+          }
+        }
+      },
+      "FsMoveCopyRequest": {
+        "type": "object",
+        "required": [
+          "src_dir",
+          "dst_dir",
+          "names"
+        ],
+        "properties": {
+          "src_dir": {
+            "type": "string",
+            "description": "Source directory path",
+            "examples": [
+              "/source"
+            ]
+          },
+          "dst_dir": {
+            "type": "string",
+            "description": "Destination directory path",
+            "examples": [
+              "/destination"
+            ]
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of file/folder names to move/copy",
+            "examples": [
+              [
+                "file1.txt",
+                "file2.pdf"
+              ]
+            ]
+          }
+        }
+      },
+      "FsRemoveRequest": {
+        "type": "object",
+        "required": [
+          "dir",
+          "names"
+        ],
+        "properties": {
+          "dir": {
+            "type": "string",
+            "description": "Directory containing files to remove",
+            "examples": [
+              "/folder"
+            ]
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of file/folder names to remove",
+            "examples": [
+              [
+                "file1.txt",
+                "file2.pdf"
+              ]
+            ]
+          }
+        }
+      },
+      "StorageDetails": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "driver_name": {
+            "type": "string",
+            "description": "Storage driver name",
+            "examples": [
+              "Local"
+            ]
+          },
+          "total_space": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total storage space in bytes",
+            "examples": [
+              1000000000000
+            ]
+          },
+          "free_space": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Free storage space in bytes",
+            "examples": [
+              500000000000
+            ]
+          }
+        }
+      },
+      "Storage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "examples": [
+              1
+            ]
+          },
+          "mount_path": {
+            "type": "string",
+            "description": "Path where storage is mounted",
+            "examples": [
+              "/local"
+            ]
+          },
+          "order": {
+            "type": "integer",
+            "description": "Display order",
+            "examples": [
+              0
+            ]
+          },
+          "driver": {
+            "type": "string",
+            "description": "Storage driver name",
+            "examples": [
+              "Local"
+            ]
+          },
+          "cache_expiration": {
+            "type": "integer",
+            "description": "Cache expiration time in minutes",
+            "examples": [
+              30
+            ]
+          },
+          "status": {
+            "type": "string",
+            "description": "Storage status",
+            "enum": [
+              "work",
+              "error",
+              "disabled"
+            ],
+            "examples": [
+              "work"
+            ]
+          },
+          "addition": {
+            "type": "string",
+            "description": "Driver-specific configuration (JSON string)",
+            "examples": [
+              "{\"root_folder_path\":\"D:\\\\files\"}"
+            ]
+          },
+          "remark": {
+            "type": "string",
+            "description": "Storage description/notes",
+            "examples": [
+              "Local storage"
+            ]
+          },
+          "modified": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "disabled": {
+            "type": "boolean",
+            "examples": [
+              false
+            ]
+          },
+          "disable_index": {
+            "type": "boolean",
+            "description": "Disable search indexing for this storage",
+            "examples": [
+              false
+            ]
+          },
+          "enable_sign": {
+            "type": "boolean",
+            "description": "Enable signature verification for downloads",
+            "examples": [
+              false
+            ]
+          },
+          "order_by": {
+            "type": "string",
+            "description": "Default sort field",
+            "examples": [
+              "name"
+            ]
+          },
+          "order_direction": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "examples": [
+              "asc"
+            ]
+          },
+          "extract_folder": {
+            "type": "string",
+            "description": "Extract folder behavior",
+            "examples": [
+              "front"
+            ]
+          },
+          "web_proxy": {
+            "type": "boolean",
+            "examples": [
+              false
+            ]
+          },
+          "webdav_policy": {
+            "type": "string",
+            "enum": [
+              "native_proxy",
+              "302_redirect",
+              "use_proxy_url"
+            ],
+            "examples": [
+              "native_proxy"
+            ]
+          },
+          "down_proxy_url": {
+            "type": "string",
+            "description": "Proxy URL for downloads",
+            "examples": [
+              ""
+            ]
+          }
+        }
+      },
+      "DriverInfo": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "examples": [
+              "Local"
+            ]
+          },
+          "config": {
+            "type": "object",
+            "description": "Driver configuration schema",
+            "additionalProperties": true,
+            "properties": {}
+          }
+        }
+      },
+      "StorageResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/Storage"
+              }
+            }
+          }
+        ]
+      },
+      "StoragesListResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Storage"
+                    }
+                  },
+                  "total": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "responses": {},
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT token obtained from login endpoint.\nInclude the token directly (without \"Bearer\" prefix) in Authorization header.\n"
+      }
+    }
+  },
+  "servers": [],
+  "security": []
+}

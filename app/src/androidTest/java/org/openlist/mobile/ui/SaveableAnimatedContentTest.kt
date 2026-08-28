@@ -1,0 +1,119 @@
+package org.openlist.mobile.ui
+
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Rule
+import org.junit.Test
+import org.junit.Assert.assertEquals
+import org.junit.runner.RunWith
+
+@RunWith(AndroidJUnit4::class)
+class SaveableAnimatedContentTest {
+    @get:Rule
+    val compose = createComposeRule()
+
+    @Test
+    fun preservesRememberSaveableStateAcrossAnimatedDestinationSwitches() {
+        var destination by mutableStateOf("files")
+
+        compose.setContent {
+            MaterialTheme {
+                Column {
+                    Button(onClick = { destination = "files" }) { Text("文件") }
+                    Button(onClick = { destination = "settings" }) { Text("设置") }
+                    SaveableAnimatedContent(
+                        targetState = destination,
+                        label = "test-destination",
+                    ) { target ->
+                        RetainedPane(key = target)
+                    }
+                }
+            }
+        }
+
+        compose.onNodeWithTag("files-value").assertTextContains("初始")
+        compose.onNodeWithText("更新 files").performClick()
+        compose.onNodeWithTag("files-value").assertTextContains("已更新")
+
+        compose.onNodeWithText("设置").performClick()
+        compose.onNodeWithTag("settings-value").assertTextContains("初始")
+        compose.onNodeWithText("更新 settings").performClick()
+        compose.onNodeWithTag("settings-value").assertTextContains("已更新")
+
+        compose.onNodeWithText("文件").performClick()
+        compose.onNodeWithTag("files-value").assertTextContains("已更新")
+    }
+
+    @Test
+    fun sessionLoadFailureShowsAnExplicitWorkingRetryAction() {
+        var retryCount = 0
+
+        compose.setContent {
+            MaterialTheme {
+                SessionLoadingScreen(
+                    errorMessage = "读取本机会话超时，请点击重试",
+                    onRetry = { retryCount += 1 },
+                )
+            }
+        }
+
+        compose.onNodeWithText("读取本机会话超时，请点击重试").assertExists()
+        compose.onNodeWithText("重试读取").performClick()
+        compose.runOnIdle { assertEquals(1, retryCount) }
+    }
+
+    @Test
+    fun responsiveNavigationChangeKeepsDestinationState() {
+        var useNavigationRail by mutableStateOf(false)
+
+        compose.setContent {
+            MaterialTheme {
+                ResponsiveDestinationHost(
+                    useNavigationRail = useNavigationRail,
+                    navigationRail = { Text("宽屏导航") },
+                    bottomBar = { Text("窄屏导航") },
+                ) {
+                    RetainedPane(key = "responsive")
+                }
+            }
+        }
+
+        compose.onNodeWithText("窄屏导航").assertExists()
+        compose.onNodeWithText("更新 responsive").performClick()
+        compose.onNodeWithTag("responsive-value").assertTextContains("已更新")
+
+        compose.runOnIdle { useNavigationRail = true }
+        compose.onNodeWithText("宽屏导航").assertExists()
+        compose.onNodeWithTag("responsive-value").assertTextContains("已更新")
+
+        compose.runOnIdle { useNavigationRail = false }
+        compose.onNodeWithText("窄屏导航").assertExists()
+        compose.onNodeWithTag("responsive-value").assertTextContains("已更新")
+    }
+}
+
+@Composable
+private fun RetainedPane(key: String) {
+    var value by rememberSaveable { mutableStateOf("$key 初始") }
+    Column {
+        Text(value, Modifier.testTag("$key-value"))
+        Button(onClick = { value = "$key 已更新" }) {
+            Text("更新 $key")
+        }
+    }
+}

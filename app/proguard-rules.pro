@@ -1,0 +1,5 @@
+-keepattributes Signature,*Annotation*
+-keep class org.openlist.mobile.data.api.dto.** { *; }
+-keep class org.openlist.mobile.core.model.** { *; }
+-keep class org.openlist.mobile.data.upload.UploadCheckpoint { *; }
+-dontwarn org.conscrypt.**

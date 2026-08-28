@@ -1,0 +1,131 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "androidx.media3",
+    "module": "media3-extractor",
+    "version": "1.11.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.1.0"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseVariantReleaseApiPublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.media3",
+          "module": "media3-common",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "androidx.media3",
+          "module": "media3-container",
+          "version": {
+            "requires": "1.11.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "media3-extractor-1.11.0.aar",
+          "url": "media3-extractor-1.11.0.aar",
+          "size": 1099479,
+          "sha512": "1c1eeba9818cb08a2b13ae7f9537347bbc445624619114e54f71abddcfd33fbd58c584ea334ea4d75f4c64a13b819a2ff1843743dcd5d6b7bfa7f4454c36e9b2",
+          "sha256": "ab02c7771487d25fa9f1dd3290ffc4184895012cfe76772f8122e8050ed8b76d",
+          "sha1": "dffa9570f93bcb78e6a19c97dcd097a16dac551f",
+          "md5": "dc93240bb96b07d07f9c084d8c6e268e"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseRuntimePublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.annotation",
+          "module": "annotation",
+          "version": {
+            "requires": "1.6.0"
+          }
+        },
+        {
+          "group": "com.googlecode.juniversalchardet",
+          "module": "juniversalchardet",
+          "version": {
+            "requires": "1.0.3"
+          }
+        },
+        {
+          "group": "androidx.media3",
+          "module": "media3-decoder",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "androidx.media3",
+          "module": "media3-common",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "androidx.media3",
+          "module": "media3-container",
+          "version": {
+            "requires": "1.11.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "media3-extractor-1.11.0.aar",
+          "url": "media3-extractor-1.11.0.aar",
+          "size": 1099479,
+          "sha512": "1c1eeba9818cb08a2b13ae7f9537347bbc445624619114e54f71abddcfd33fbd58c584ea334ea4d75f4c64a13b819a2ff1843743dcd5d6b7bfa7f4454c36e9b2",
+          "sha256": "ab02c7771487d25fa9f1dd3290ffc4184895012cfe76772f8122e8050ed8b76d",
+          "sha1": "dffa9570f93bcb78e6a19c97dcd097a16dac551f",
+          "md5": "dc93240bb96b07d07f9c084d8c6e268e"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseSourcePublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "media3-extractor-1.11.0-sources.jar",
+          "url": "media3-extractor-1.11.0-sources.jar",
+          "size": 902772,
+          "sha512": "112142c815d9b3b96d132bbb12b514eb220dbd01a3c9b378e9f730c5230a69fa3b1a9f7e11bd10b30b1ffd0d39c717c4b37534763eee47c37cc057a65da8903f",
+          "sha256": "9140bc79e9f11c7841348dba9686c9af98d3517a3b519c1292d90b3e5fa1a5d2",
+          "sha1": "ac94a882b3fc515a845ac33235719ecefbaeedd9",
+          "md5": "82e8babf8f4689418a4fc106f9739f4e"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,248 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "androidx.media3",
+    "module": "media3-common",
+    "version": "1.11.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.1.0"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseVariantReleaseApiPublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "com.google.guava",
+          "module": "guava",
+          "version": {
+            "requires": "33.3.1-android"
+          },
+          "excludes": [
+            {
+              "group": "com.google.j2objc",
+              "module": "j2objc-annotations"
+            },
+            {
+              "group": "org.checkerframework",
+              "module": "checker-compat-qual"
+            },
+            {
+              "group": "com.google.code.findbugs",
+              "module": "jsr305"
+            },
+            {
+              "group": "org.codehaus.mojo",
+              "module": "animal-sniffer-annotations"
+            },
+            {
+              "group": "org.checkerframework",
+              "module": "checker-qual"
+            },
+            {
+              "group": "com.google.errorprone",
+              "module": "error_prone_annotations"
+            }
+          ]
+        },
+        {
+          "group": "androidx.annotation",
+          "module": "annotation-experimental",
+          "version": {
+            "requires": "1.3.1"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "media3-common-1.11.0.aar",
+          "url": "media3-common-1.11.0.aar",
+          "size": 665389,
+          "sha512": "e81f74999983358a39c724d18ef6db11d2d408f457919c92994dcbc42ec285e2907cb98b57b4b34c52db63f0657ddeee2de132f4969c0ebbfbf6cbe44e2ac5bc",
+          "sha256": "9b061d4788617a3285d1f2f64e713f60d8831dedbc68f7bad983817410c2a4be",
+          "sha1": "3f65d89f872e0e749ebd8e16b1d402cff46a406e",
+          "md5": "7694a936b24501b318a39145e1eb4d1b"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseRuntimePublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.annotation",
+          "module": "annotation",
+          "version": {
+            "requires": "1.6.0"
+          }
+        },
+        {
+          "group": "com.google.guava",
+          "module": "guava",
+          "version": {
+            "requires": "33.3.1-android"
+          },
+          "excludes": [
+            {
+              "group": "com.google.j2objc",
+              "module": "j2objc-annotations"
+            },
+            {
+              "group": "org.checkerframework",
+              "module": "checker-compat-qual"
+            },
+            {
+              "group": "com.google.code.findbugs",
+              "module": "jsr305"
+            },
+            {
+              "group": "org.codehaus.mojo",
+              "module": "animal-sniffer-annotations"
+            },
+            {
+              "group": "org.checkerframework",
+              "module": "checker-qual"
+            },
+            {
+              "group": "com.google.errorprone",
+              "module": "error_prone_annotations"
+            }
+          ]
+        },
+        {
+          "group": "androidx.annotation",
+          "module": "annotation-experimental",
+          "version": {
+            "requires": "1.3.1"
+          }
+        }
+      ],
+      "dependencyConstraints": [
+        {
+          "group": "androidx.media3",
+          "module": "media3-common",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "androidx.media3",
+          "module": "media3-container",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "androidx.media3",
+          "module": "media3-database",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "androidx.media3",
+          "module": "media3-datasource",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "androidx.media3",
+          "module": "media3-datasource-okhttp",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "androidx.media3",
+          "module": "media3-decoder",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "androidx.media3",
+          "module": "lib-decoder-ffmpeg",
+          "version": {
+            "requires": "unspecified"
+          }
+        },
+        {
+          "group": "androidx.media3",
+          "module": "media3-exoplayer",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "androidx.media3",
+          "module": "media3-exoplayer-hls",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "androidx.media3",
+          "module": "media3-extractor",
+          "version": {
+            "requires": "1.11.0"
+          }
+        },
+        {
+          "group": "androidx.media3",
+          "module": "media3-session",
+          "version": {
+            "requires": "1.11.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "media3-common-1.11.0.aar",
+          "url": "media3-common-1.11.0.aar",
+          "size": 665389,
+          "sha512": "e81f74999983358a39c724d18ef6db11d2d408f457919c92994dcbc42ec285e2907cb98b57b4b34c52db63f0657ddeee2de132f4969c0ebbfbf6cbe44e2ac5bc",
+          "sha256": "9b061d4788617a3285d1f2f64e713f60d8831dedbc68f7bad983817410c2a4be",
+          "sha1": "3f65d89f872e0e749ebd8e16b1d402cff46a406e",
+          "md5": "7694a936b24501b318a39145e1eb4d1b"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseSourcePublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "media3-common-1.11.0-sources.jar",
+          "url": "media3-common-1.11.0-sources.jar",
+          "size": 540260,
+          "sha512": "579b154464c6dc43f68dab9edd8a55c68bc2b588d7187469abc6ba06ce5440ab976e4278afb0afaeb79cd9ae3f33206144a3c4d64d46557a8a627156e09be140",
+          "sha256": "b54a90bb8c407959574ad2962afdea971d967804f95d2fc58a433145efeffdeb",
+          "sha1": "975339efbb5370cf172c381ca110af1b72a11204",
+          "md5": "1ecd523cb0e9449a65249a502c193322"
+        }
+      ]
+    }
+  ]
+}

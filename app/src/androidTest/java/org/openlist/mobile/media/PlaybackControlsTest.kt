@@ -1,0 +1,429 @@
+package org.openlist.mobile.media
+
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
+import androidx.compose.ui.unit.dp
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+
+@RunWith(AndroidJUnit4::class)
+class PlaybackControlsTest {
+    @get:Rule
+    val compose = createComposeRule()
+
+    @Test
+    fun playbackInfoButtonOpensAndClosesPrivacySafeDialog() {
+        val dialogVisible = mutableStateOf(false)
+        compose.setContent {
+            MaterialTheme {
+                PlaybackInfoButton(
+                    onClick = { dialogVisible.value = true },
+                    onVideoSurface = false,
+                )
+                if (dialogVisible.value) {
+                    PlaybackInfoDialogContent(
+                        snapshot = PlaybackInfoSnapshot(
+                            title = "https://example.invalid/private/movie.mp4?token=secret",
+                            networkBytesPerSecond = 1_048_576L,
+                            cacheBytesRead = 2_097_152L,
+                            sessionCacheStatus = PlaybackCacheStatus.HIT,
+                        ),
+                        onDismiss = { dialogVisible.value = false },
+                    )
+                }
+            }
+        }
+
+        compose.onNodeWithContentDescription("播放信息").assertExists().performClick()
+        compose.onNodeWithTag(PlaybackUiTags.PLAYBACK_INFO_DIALOG).assertExists()
+        compose.onNodeWithText("movie.mp4").assertExists()
+        compose.onNodeWithText("1.00 MiB/s").assertExists()
+        compose.onNodeWithText("命中").assertExists()
+        compose.onNodeWithText("https://example.invalid/private/movie.mp4?token=secret")
+            .assertDoesNotExist()
+        compose.onNodeWithText("secret", substring = true).assertDoesNotExist()
+
+        compose.onNodeWithTag(PlaybackUiTags.PLAYBACK_INFO_CLOSE).performClick()
+        compose.onNodeWithTag(PlaybackUiTags.PLAYBACK_INFO_DIALOG).assertDoesNotExist()
+    }
+
+    @Test
+    fun videoGestureLayerRoutesTapDoubleTapAndLongPress() {
+        var tapCount = 0
+        var seekBackCount = 0
+        var seekForwardCount = 0
+        val speedEvents = mutableListOf<String>()
+        compose.setContent {
+            VideoGestureSurface(
+                onTap = { tapCount += 1 },
+                canSeek = { true },
+                currentPositionMs = { 0L },
+                durationMs = { 120_000L },
+                onSeekBack = { seekBackCount += 1 },
+                onSeekForward = { seekForwardCount += 1 },
+                onHorizontalSeekPreview = {},
+                onHorizontalSeek = {},
+                onSpeedBoostStart = {
+                    speedEvents += "start"
+                    true
+                },
+                onSpeedBoostEnd = { speedEvents += "end" },
+                modifier = Modifier.width(300.dp).height(180.dp),
+            )
+        }
+
+        val gestureLayer = compose.onNodeWithTag(PlaybackUiTags.VIDEO_GESTURE_SURFACE)
+        gestureLayer.performTouchInput {
+            val gestureGap = viewConfiguration.doubleTapTimeoutMillis + 100L
+            click(center)
+            advanceEventTime(gestureGap)
+            doubleClick(Offset(width * 0.25f, center.y))
+            advanceEventTime(gestureGap)
+            doubleClick(Offset(width * 0.75f, center.y))
+            advanceEventTime(gestureGap)
+            longClick(center)
+        }
+
+        compose.runOnIdle {
+            assertEquals(1, tapCount)
+            assertEquals(1, seekBackCount)
+            assertEquals(1, seekForwardCount)
+            assertEquals(listOf("start", "end"), speedEvents)
+        }
+    }
+
+    @Test
+    fun horizontalVideoDragUsesFrozenPlaybackPositionAndCommitsExactlyOnce() {
+        var tapCount = 0
+        var currentPositionMs = 10_000L
+        val previews = mutableListOf<Long?>()
+        val committedPositions = mutableListOf<Long>()
+        compose.setContent {
+            VideoGestureSurface(
+                onTap = { tapCount += 1 },
+                canSeek = { true },
+                currentPositionMs = { currentPositionMs },
+                durationMs = { 100_000L },
+                onSeekBack = {},
+                onSeekForward = {},
+                onHorizontalSeekPreview = { positionMs ->
+                    previews += positionMs
+                    if (positionMs != null) currentPositionMs = 80_000L
+                },
+                onHorizontalSeek = committedPositions::add,
+                onSpeedBoostStart = { false },
+                onSpeedBoostEnd = {},
+                modifier = Modifier.width(300.dp).height(180.dp),
+            )
+        }
+
+        compose.onNodeWithTag(PlaybackUiTags.VIDEO_GESTURE_SURFACE).performTouchInput {
+            swipe(
+                start = Offset(width * 0.65f, center.y),
+                end = Offset(width * 0.8f, center.y),
+                durationMillis = 600L,
+            )
+        }
+
+        compose.runOnIdle {
+            assertEquals(0, tapCount)
+            assertTrue(previews.filterNotNull().isNotEmpty())
+            assertTrue(previews.filterNotNull().all { it % 1_000L == 0L })
+            assertEquals(null, previews.last())
+            assertEquals(1, committedPositions.size)
+            assertTrue(committedPositions.single() in 13_000L..17_000L)
+            assertEquals(0L, committedPositions.single() % 1_000L)
+        }
+    }
+
+    @Test
+    fun cancelledHorizontalVideoDragClearsPreviewWithoutCommittingSeek() {
+        val previews = mutableListOf<Long?>()
+        val committedPositions = mutableListOf<Long>()
+        compose.setContent {
+            VideoGestureSurface(
+                onTap = {},
+                canSeek = { true },
+                currentPositionMs = { 30_000L },
+                durationMs = { 100_000L },
+                onSeekBack = {},
+                onSeekForward = {},
+                onHorizontalSeekPreview = previews::add,
+                onHorizontalSeek = committedPositions::add,
+                onSpeedBoostStart = { false },
+                onSpeedBoostEnd = {},
+                modifier = Modifier.width(300.dp).height(180.dp),
+            )
+        }
+
+        compose.onNodeWithTag(PlaybackUiTags.VIDEO_GESTURE_SURFACE).performTouchInput {
+            down(Offset(width * 0.4f, center.y))
+            moveTo(Offset(width * 0.7f, center.y), 300L)
+            cancel()
+        }
+
+        compose.runOnIdle {
+            assertTrue(previews.filterNotNull().isNotEmpty())
+            assertEquals(null, previews.last())
+            assertTrue(committedPositions.isEmpty())
+        }
+    }
+
+    @Test
+    fun horizontalDragCancelsPendingLongPressAndDoesNotBecomeATap() {
+        var tapCount = 0
+        val speedEvents = mutableListOf<String>()
+        val committedPositions = mutableListOf<Long>()
+        compose.setContent {
+            VideoGestureSurface(
+                onTap = { tapCount += 1 },
+                canSeek = { true },
+                currentPositionMs = { 0L },
+                durationMs = { 90_000L },
+                onSeekBack = {},
+                onSeekForward = {},
+                onHorizontalSeekPreview = {},
+                onHorizontalSeek = committedPositions::add,
+                onSpeedBoostStart = {
+                    speedEvents += "start"
+                    true
+                },
+                onSpeedBoostEnd = { speedEvents += "end" },
+                modifier = Modifier.width(300.dp).height(180.dp),
+            )
+        }
+
+        compose.onNodeWithTag(PlaybackUiTags.VIDEO_GESTURE_SURFACE).performTouchInput {
+            down(center)
+            advanceEventTime(viewConfiguration.longPressTimeoutMillis / 2L)
+            moveTo(Offset(width * 0.8f, center.y), 200L)
+            up()
+        }
+
+        compose.runOnIdle {
+            assertEquals(0, tapCount)
+            assertTrue(speedEvents.isEmpty())
+            assertEquals(1, committedPositions.size)
+        }
+    }
+
+    @Test
+    fun videoGesturesReportInteractionUntilEveryPointerIsReleased() {
+        val interactionStates = mutableListOf<Boolean>()
+        compose.setContent {
+            VideoGestureSurface(
+                onTap = {},
+                canSeek = { true },
+                currentPositionMs = { 0L },
+                durationMs = { 90_000L },
+                onSeekBack = {},
+                onSeekForward = {},
+                onHorizontalSeekPreview = {},
+                onHorizontalSeek = {},
+                onSpeedBoostStart = { true },
+                onSpeedBoostEnd = {},
+                onInteractionActiveChange = interactionStates::add,
+                modifier = Modifier.width(300.dp).height(180.dp),
+            )
+        }
+
+        val gestureLayer = compose.onNodeWithTag(PlaybackUiTags.VIDEO_GESTURE_SURFACE)
+
+        gestureLayer.performTouchInput {
+            doubleClick(Offset(width * 0.25f, center.y))
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(true, false, true, false), interactionStates)
+            interactionStates.clear()
+        }
+
+        gestureLayer.performTouchInput {
+            advanceEventTime(viewConfiguration.doubleTapTimeoutMillis + 100L)
+            longClick(center)
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(true, false), interactionStates)
+            interactionStates.clear()
+        }
+
+        gestureLayer.performTouchInput {
+            advanceEventTime(viewConfiguration.doubleTapTimeoutMillis + 100L)
+            swipe(
+                start = Offset(width * 0.1f, center.y),
+                end = Offset(width * 0.8f, center.y),
+                durationMillis = 600L,
+            )
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(true, false), interactionStates)
+        }
+    }
+
+    @Test
+    fun videoScaleToggleProvidesZoomAndRestoreActions() {
+        val zoomed = mutableStateOf(false)
+        compose.setContent {
+            MaterialTheme {
+                VideoScaleToggleButton(
+                    isZoomed = zoomed.value,
+                    onToggle = { zoomed.value = !zoomed.value },
+                )
+            }
+        }
+
+        val zoomToggle = compose.onNodeWithTag(PlaybackUiTags.VIDEO_ZOOM_TOGGLE)
+        compose.onNodeWithContentDescription("放大画面").assertExists()
+        zoomToggle.performClick()
+        compose.runOnIdle { assertTrue(zoomed.value) }
+        compose.onNodeWithContentDescription("恢复完整画面").assertExists()
+
+        zoomToggle.performClick()
+        compose.runOnIdle { assertTrue(!zoomed.value) }
+    }
+
+    @Test
+    fun doubleTapReadsSeekAvailabilityWhenTheGestureActuallyRuns() {
+        var seekAllowed = false
+        var seekForwardCount = 0
+        compose.setContent {
+            VideoGestureSurface(
+                onTap = {},
+                canSeek = { seekAllowed },
+                currentPositionMs = { 0L },
+                durationMs = { 60_000L },
+                onSeekBack = {},
+                onSeekForward = { seekForwardCount += 1 },
+                onHorizontalSeekPreview = {},
+                onHorizontalSeek = {},
+                onSpeedBoostStart = { false },
+                onSpeedBoostEnd = {},
+                modifier = Modifier.width(300.dp).height(180.dp),
+            )
+        }
+
+        val gestureLayer = compose.onNodeWithTag(PlaybackUiTags.VIDEO_GESTURE_SURFACE)
+        gestureLayer.performTouchInput { doubleClick(Offset(width * 0.75f, center.y)) }
+        compose.runOnIdle {
+            assertEquals(0, seekForwardCount)
+            seekAllowed = true
+        }
+        gestureLayer.performTouchInput {
+            advanceEventTime(viewConfiguration.doubleTapTimeoutMillis + 100L)
+            doubleClick(Offset(width * 0.75f, center.y))
+        }
+
+        compose.runOnIdle { assertEquals(1, seekForwardCount) }
+    }
+
+    @Test
+    fun sliderPreviewsContinuouslyButCommitsOneSeekWhenDragFinishes() {
+        val scrubbedPositions = mutableListOf<Long>()
+        val committedPositions = mutableListOf<Long>()
+        compose.setContent {
+            MaterialTheme {
+                SeekablePlaybackSlider(
+                    currentPositionMs = 0L,
+                    durationMs = 120_000L,
+                    onScrub = scrubbedPositions::add,
+                    onSeek = committedPositions::add,
+                    onVideoSurface = false,
+                    modifier = Modifier.width(320.dp),
+                )
+            }
+        }
+
+        compose.onNodeWithTag(PlaybackUiTags.PROGRESS_SLIDER).performTouchInput {
+            swipe(
+                start = Offset(width * 0.1f, center.y),
+                end = Offset(width * 0.8f, center.y),
+                durationMillis = 600L,
+            )
+        }
+
+        compose.runOnIdle {
+            assertTrue(scrubbedPositions.isNotEmpty())
+            assertEquals(1, committedPositions.size)
+            assertTrue(committedPositions.single() in 60_000L..120_000L)
+        }
+    }
+
+    @Test
+    fun sliderKeepsTheDragSnapshotWhenDurationChangesMidGesture() {
+        val durationMs = mutableStateOf(120_000L)
+        val committedPositions = mutableListOf<Long>()
+        var durationUpdated = false
+        compose.setContent {
+            MaterialTheme {
+                SeekablePlaybackSlider(
+                    currentPositionMs = 0L,
+                    durationMs = durationMs.value,
+                    onScrub = {
+                        if (!durationUpdated) {
+                            durationUpdated = true
+                            durationMs.value = 240_000L
+                        }
+                    },
+                    onSeek = committedPositions::add,
+                    onVideoSurface = false,
+                    modifier = Modifier.width(320.dp),
+                )
+            }
+        }
+
+        compose.onNodeWithTag(PlaybackUiTags.PROGRESS_SLIDER).performTouchInput {
+            swipe(
+                start = Offset(width * 0.1f, center.y),
+                end = Offset(width * 0.8f, center.y),
+                durationMillis = 600L,
+            )
+        }
+
+        compose.runOnIdle {
+            assertTrue(durationUpdated)
+            assertEquals(1, committedPositions.size)
+            assertTrue(committedPositions.single() in 60_000L..120_000L)
+        }
+    }
+
+    @Test
+    fun unknownDurationDisablesScrubbingWithoutSubmittingASeek() {
+        val committedPositions = mutableListOf<Long>()
+        compose.setContent {
+            MaterialTheme {
+                SeekablePlaybackSlider(
+                    currentPositionMs = 20_000L,
+                    durationMs = null,
+                    onScrub = {},
+                    onSeek = committedPositions::add,
+                    onVideoSurface = false,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+
+        compose.onNodeWithTag(PlaybackUiTags.PROGRESS_SLIDER).performTouchInput {
+            swipe(centerLeft, centerRight, durationMillis = 300L)
+        }
+
+        compose.runOnIdle { assertTrue(committedPositions.isEmpty()) }
+    }
+}
