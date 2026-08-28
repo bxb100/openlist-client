@@ -1,26 +1,22 @@
 package org.openlist.mobile.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -29,14 +25,18 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,7 +54,6 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -62,7 +61,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -289,6 +287,7 @@ internal fun LoginScreen(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun LoginPageContent(
     step: LoginStep,
@@ -313,17 +312,51 @@ internal fun LoginPageContent(
 ) {
     var showConnectionSettings by rememberSaveable { mutableStateOf(false) }
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface),
-    ) {
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.surface,
+        topBar = {
+            // A title-less top app bar keeps the branded hero centered in the body while giving
+            // the connection-settings and back actions a real app-bar surface with correct insets,
+            // instead of text buttons floated over the scrolling form.
+            TopAppBar(
+                title = {},
+                navigationIcon = {
+                    if (step == LoginStep.TwoFactor) {
+                        IconButton(
+                            onClick = onBackToCredentials,
+                            enabled = !loading,
+                            modifier = Modifier.testTag(LoginUiTags.OTP_BACK),
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "返回",
+                            )
+                        }
+                    }
+                },
+                actions = {
+                    if (step == LoginStep.Credentials) {
+                        TextButton(
+                            onClick = { showConnectionSettings = true },
+                            enabled = !loading,
+                            modifier = Modifier.testTag(LoginUiTags.SETTINGS),
+                        ) {
+                            Text("连接设置")
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                ),
+            )
+        },
+    ) { contentPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(contentPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 56.dp),
+                .padding(horizontal = 24.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
@@ -335,7 +368,6 @@ internal fun LoginPageContent(
                     text = "OpenList",
                     modifier = Modifier.semantics { heading() },
                     style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -374,34 +406,6 @@ internal fun LoginPageContent(
                         onBack = onBackToCredentials,
                     )
                 }
-            }
-        }
-
-        // Keep top actions after the full-screen scroll container so real pointer input reaches
-        // them. Semantics-only tests do not detect a scroll layer intercepting these taps.
-        if (step == LoginStep.Credentials) {
-            TextButton(
-                onClick = { showConnectionSettings = true },
-                enabled = !loading,
-                modifier = Modifier
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .align(Alignment.TopEnd)
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                    .testTag(LoginUiTags.SETTINGS),
-            ) {
-                Text("连接设置")
-            }
-        } else {
-            TextButton(
-                onClick = onBackToCredentials,
-                enabled = !loading,
-                modifier = Modifier
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .align(Alignment.TopStart)
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                    .testTag(LoginUiTags.OTP_BACK),
-            ) {
-                Text("返回")
             }
         }
     }
@@ -521,7 +525,7 @@ private fun TwoFactorLoginContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("两步验证", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        Text("两步验证", style = MaterialTheme.typography.titleLarge)
         Text(
             "请输入身份验证器中显示的验证码",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -607,7 +611,7 @@ private fun LoginButtonLabel(loading: Boolean, idleText: String) {
         Spacer(Modifier.size(10.dp))
         Text("正在连接")
     } else {
-        Text(idleText, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
+        Text(idleText)
     }
 }
 

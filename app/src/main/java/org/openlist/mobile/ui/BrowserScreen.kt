@@ -65,6 +65,7 @@ import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Download
@@ -151,6 +152,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -1619,6 +1621,7 @@ private fun FileActionsDialog(
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { if (!busy) confirmDelete = false },
+            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
             title = { Text("删除“${entry.item.name}”？") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2285,6 +2288,7 @@ private fun ErrorState(message: String, onRetry: () -> Unit) {
             message,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(20.dp))
         Button(onClick = onRetry) {
@@ -2347,12 +2351,13 @@ private fun EmptyState(
             )
         }
         Spacer(Modifier.height(20.dp))
-        Text(title, style = MaterialTheme.typography.titleLarge)
+        Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
         Spacer(Modifier.height(8.dp))
         Text(
             message,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
         )
         action?.let {
             Spacer(Modifier.height(20.dp))

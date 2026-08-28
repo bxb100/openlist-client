@@ -52,6 +52,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -203,9 +205,13 @@ internal fun SettingsPageContent(
         }
     }
 
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+
     Scaffold(
-        modifier = modifier.fillMaxSize(),
-        topBar = { TopAppBar(title = { Text("设置") }) },
+        modifier = modifier
+            .fillMaxSize()
+            .nestedScroll(scrollBehavior.nestedScrollConnection),
+        topBar = { TopAppBar(title = { Text("设置") }, scrollBehavior = scrollBehavior) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { contentPadding ->
         LazyColumn(
@@ -492,6 +498,7 @@ internal fun SettingsPageContent(
     if (clearConfirmation) {
         AlertDialog(
             onDismissRequest = { clearConfirmation = false },
+            icon = { Icon(Icons.Default.DeleteSweep, contentDescription = null) },
             title = { Text("清空离线缓存？") },
             text = { Text("已缓存的媒体和文件会被移除，需要时可再次从服务器下载。缓存限制不会改变。") },
             confirmButton = {
@@ -526,6 +533,7 @@ internal fun SettingsPageContent(
     if (logoutConfirmation) {
         AlertDialog(
             onDismissRequest = { logoutConfirmation = false },
+            icon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
             title = { Text("退出当前服务器？") },
             text = { Text("服务器地址和缓存偏好会保留，你可以稍后重新登录。") },
             confirmButton = {
