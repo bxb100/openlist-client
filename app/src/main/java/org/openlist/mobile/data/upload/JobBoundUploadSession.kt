@@ -4,20 +4,24 @@ import com.google.gson.Gson
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import org.openlist.mobile.core.model.ServerProfile
+import org.openlist.mobile.data.api.HttpSessionSnapshot
 import org.openlist.mobile.data.api.OpenListHttpClient
 
-/** Authentication and routing captured once for a single background upload job. */
+/** Fixed server and login identity for one upload; tokens may renew within that login. */
 class JobBoundUploadSession private constructor(
     val baseUrl: String,
     val username: String,
     private val allowInsecureHttp: Boolean,
     private val token: String,
+    private val sessionBindingKey: String,
 ) {
     val serverScope: String = "$baseUrl|$username"
 
     fun newHttpClient(
         okHttpClient: OkHttpClient,
         gson: Gson,
+        currentSnapshot: (() -> HttpSessionSnapshot)? = null,
+        refreshSession: (suspend (HttpSessionSnapshot) -> HttpSessionSnapshot?)? = null,
         isSessionCurrent: () -> Boolean,
     ): OpenListHttpClient {
         val guard = Interceptor { chain ->
@@ -32,12 +36,45 @@ class JobBoundUploadSession private constructor(
             // A network interceptor runs once per physical request, including redirect hops.
             .addNetworkInterceptor(guard)
             .build()
+        val fixed = HttpSessionSnapshot(
+            baseUrl = baseUrl,
+            token = token,
+            allowInsecureHttp = allowInsecureHttp,
+            sessionBindingKey = sessionBindingKey,
+        )
+        fun validateSnapshot(current: HttpSessionSnapshot): HttpSessionSnapshot {
+            if (!isSessionCurrent() ||
+                normalizeBaseUrl(current.baseUrl) != baseUrl ||
+                current.allowInsecureHttp != allowInsecureHttp ||
+                current.token.isNullOrBlank() ||
+                current.sessionBindingKey.ifBlank { current.token.orEmpty() } != sessionBindingKey
+            ) {
+                throw UploadPermanentException("登录服务器、账号或凭据已变化，上传已停止")
+            }
+            return current
+        }
         return OpenListHttpClient(
             baseUrl = { baseUrl },
             token = { token },
             allowInsecureHttp = { allowInsecureHttp },
             okHttpClient = guardedClient,
             gson = gson,
+            sessionSnapshot = {
+                if (currentSnapshot == null) fixed else {
+                    if (!isSessionCurrent()) {
+                        throw UploadPermanentException("登录服务器、账号或凭据已变化，上传已停止")
+                    }
+                    validateSnapshot(currentSnapshot())
+                }
+            },
+            refreshSession = if (refreshSession == null) {
+                null
+            } else {
+                { expired ->
+                    validateSnapshot(expired)
+                    refreshSession(expired)?.let(::validateSnapshot)
+                }
+            },
         )
     }
 
@@ -46,11 +83,12 @@ class JobBoundUploadSession private constructor(
         username: String,
         allowInsecureHttp: Boolean,
         token: String,
+        sessionBindingKey: String = token,
     ): Boolean =
         normalizeBaseUrl(baseUrl) == this.baseUrl &&
             username == this.username &&
             allowInsecureHttp == this.allowInsecureHttp &&
-            token == this.token
+            token.isNotBlank() && sessionBindingKey == this.sessionBindingKey
 
     companion object {
         fun capture(
@@ -62,6 +100,7 @@ class JobBoundUploadSession private constructor(
             currentUsername: String,
             currentAllowInsecureHttp: Boolean,
             currentToken: String,
+            currentSessionBindingKey: String = currentToken,
         ): JobBoundUploadSession {
             val expectedBase = normalizeBaseUrl(expectedBaseUrl)
             val currentBase = normalizeBaseUrl(currentBaseUrl)
@@ -87,7 +126,7 @@ class JobBoundUploadSession private constructor(
                 username = currentUsername,
                 allowInsecureHttp = currentAllowInsecureHttp,
             )
-            if (!expectedSessionBinding.matches(UploadSessionBinding.create(currentProfile, currentToken))) {
+            if (!expectedSessionBinding.matches(UploadSessionBinding.create(currentProfile, currentSessionBindingKey))) {
                 throw UploadPermanentException("登录凭据已变化，请在当前目录重新选择文件")
             }
             return JobBoundUploadSession(
@@ -95,6 +134,7 @@ class JobBoundUploadSession private constructor(
                 username = currentUsername,
                 allowInsecureHttp = currentAllowInsecureHttp,
                 token = currentToken,
+                sessionBindingKey = currentSessionBindingKey,
             )
         }
 

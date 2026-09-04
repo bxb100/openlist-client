@@ -71,6 +71,8 @@ internal object AccountPreferencesCodec {
             preferences[Keys.username(record.id)] = record.server.username
             preferences[Keys.allowInsecureHttp(record.id)] = record.server.allowInsecureHttp
             preferences[Keys.token(record.id)] = record.token
+            preferences[Keys.encryptedPasswordHash(record.id)] = record.encryptedPasswordHash
+            preferences[Keys.sessionBindingKey(record.id)] = record.sessionBindingKey
         }
 
         // The active account is now derived from the account table. Remove the former standalone
@@ -96,6 +98,10 @@ internal object AccountPreferencesCodec {
                 ?: defaultAccountDisplayName(server),
             server = server,
             token = preferences[Keys.token(id)].orEmpty(),
+            encryptedPasswordHash = preferences[Keys.encryptedPasswordHash(id)].orEmpty(),
+            // Existing work used the login token as its binding before token renewal existed.
+            sessionBindingKey = preferences[Keys.sessionBindingKey(id)]
+                ?: preferences[Keys.token(id)].orEmpty(),
         )
     }
 
@@ -105,6 +111,8 @@ internal object AccountPreferencesCodec {
         preferences.remove(Keys.username(id))
         preferences.remove(Keys.allowInsecureHttp(id))
         preferences.remove(Keys.token(id))
+        preferences.remove(Keys.encryptedPasswordHash(id))
+        preferences.remove(Keys.sessionBindingKey(id))
     }
 
     private fun decodeOrder(value: String): List<AccountId> = value
@@ -132,5 +140,8 @@ internal object AccountPreferencesCodec {
         fun allowInsecureHttp(id: AccountId) =
             booleanPreferencesKey("account.${id.value}.allow_insecure_http")
         fun token(id: AccountId) = stringPreferencesKey("account.${id.value}.token")
+        fun encryptedPasswordHash(id: AccountId) =
+            stringPreferencesKey("account.${id.value}.encrypted_password_hash")
+        fun sessionBindingKey(id: AccountId) = stringPreferencesKey("account.${id.value}.session_binding_key")
     }
 }

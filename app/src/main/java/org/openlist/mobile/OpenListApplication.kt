@@ -20,7 +20,8 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.sync.Mutex
 import org.openlist.mobile.data.api.OpenListApi
 import org.openlist.mobile.data.api.OpenListHttpClient
-import org.openlist.mobile.data.api.HttpSessionSnapshot
+import org.openlist.mobile.data.auth.LoginCredentialCipher
+import org.openlist.mobile.data.auth.SessionAuthenticator
 import org.openlist.mobile.data.api.AdminApi
 import org.openlist.mobile.data.api.TaskApi
 import org.openlist.mobile.data.api.catalog.GenericOpenListService
@@ -169,25 +170,25 @@ class AppContainer(private val application: Application) {
         onFailure = { error -> appLogger.error("Account", "无法读取本机会话", error) },
     )
     internal val sessionLoadState: StateFlow<SessionLoadState> = sessionLoadCoordinator.state
+    private val credentialCipher = LoginCredentialCipher()
+    internal val sessionAuthenticator = SessionAuthenticator(
+        sessionStore = sessionStore,
+        credentialCipher = credentialCipher,
+        onAuthenticationRequired = { mutableAuthenticationError.value = it },
+    )
     val httpClient = OpenListHttpClient(
         baseUrl = { sessionStore.snapshot().server.baseUrl },
         token = { sessionStore.snapshot().token },
         allowInsecureHttp = { sessionStore.snapshot().server.allowInsecureHttp },
-        sessionSnapshot = {
-            val settings = sessionStore.snapshot()
-            HttpSessionSnapshot(
-                baseUrl = settings.server.baseUrl,
-                token = settings.token,
-                allowInsecureHttp = settings.server.allowInsecureHttp,
-            )
-        },
+        sessionSnapshot = sessionAuthenticator::snapshot,
+        refreshSession = sessionAuthenticator::refresh,
     )
     val api = OpenListApi(httpClient)
     val genericApi = GenericOpenListService(httpClient)
     val adminApi = AdminApi(genericApi)
     val taskApi = TaskApi(genericApi)
     val pathCredentials = InMemoryPathCredentialStore()
-    val repository = OpenListRepository(api, sessionStore, pathCredentials)
+    val repository = OpenListRepository(api, sessionStore, pathCredentials, credentialCipher)
     val mediaUrlResolver = OpenListMediaUrlResolver(api) { path ->
         pathCredentials.passwordFor(sessionStore.snapshot().server, path)
     }

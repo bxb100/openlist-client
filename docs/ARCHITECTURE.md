@@ -28,6 +28,8 @@ The source of truth is the v4.2.5 server router and handler models. The public O
 
 Core user flows use typed request and response models. Driver additions, `fs/other`, settings, message bridges, WebAuthn payloads and future endpoints remain `JsonElement` at the transport boundary. The endpoint catalog makes route coverage machine-checkable without creating hundreds of repetitive Retrofit methods; task routes are the product of two roots, seven task kinds and twelve actions.
 
+Authenticated JSON requests recover HTTP or envelope code 401 by logging in again through `/api/auth/login/hash` and replaying the original request once. Concurrent failures share the renewed token. Renewal never changes the selected account, and only commits while the original account and login generation still match. Login/logout, explicit caller Authorization headers and non-repeatable bodies are excluded from automatic replay. Missing saved credentials, rejected credentials or a new two-factor challenge return the user to login; network failures keep the session available for retry. Accounts saved before this feature need one successful manual login to enable renewal.
+
 ## Media grouping
 
 Opening an audio, video or image builds an immutable snapshot from the selected item's real parent directory. Only direct siblings with the same effective media kind are included; extension detection corrects known misclassification for `.m3u8`, `.mkv`, `.wma`, and `.wmv`. The current item appears exactly once. Matching `video.srt`, `video.language.ass`, VTT, SSA, and TTML sidecars are attached through opaque process-local references. Every audio and video queue, including WMA and WMV, follows the same service-backed Media3 path so queue state, background playback, notifications and renderer fallback remain consistent across item transitions.
@@ -54,11 +56,12 @@ Before the first upload request, the client copies the selected document into an
 
 ## Local downloads
 
-The document picker creates the destination and grants a persistable write capability; the app never requests broad storage access. A worker resolves a fresh `raw_url` immediately before transfer, strips OpenList credentials from object-storage requests, writes with truncate semantics, validates the expected byte count, and clears partial output on cancellation or permanent failure. Each job is bound one-way to the account identity and token that created it so account switching cannot retarget an in-flight download.
+The document picker creates the destination and grants a persistable write capability; the app never requests broad storage access. A worker resolves a fresh `raw_url` immediately before transfer, strips OpenList credentials from object-storage requests, writes with truncate semantics, validates the expected byte count, and clears partial output on cancellation or permanent failure. Each job is bound one-way to the account identity and login generation that created it so account switching cannot retarget an in-flight download. Automatic token renewal preserves that binding; explicit login and logout replace or clear it.
 
 ## Security boundaries
 
 - Passwords are converted to OpenList's static SHA-256 form before `/auth/login/hash`.
+- Successful logins retain only the password hash encrypted with AndroidKeyStore AES/GCM and authenticated against the account ID. Raw passwords and OTP codes are never persisted; logout, account removal and credential identity changes clear the retained hash.
 - Protected-directory passwords live only in an in-memory store keyed by server, account and nearest ancestor path; they are cleared on account changes and logout.
 - Tokens are never logged or added to third-party download hosts.
 - Cache keys and persisted queues never contain credentials or temporary URLs.

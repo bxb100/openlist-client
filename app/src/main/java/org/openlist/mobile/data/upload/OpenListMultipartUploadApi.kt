@@ -5,6 +5,7 @@ import com.google.gson.JsonParser
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.openlist.mobile.data.api.OpenListApiException
 import org.openlist.mobile.data.api.OpenListHttpClient
 import org.openlist.mobile.data.api.dto.MultipartSession
 import java.text.SimpleDateFormat
@@ -72,6 +73,25 @@ class OpenListMultipartUploadApi(
     }
 
     private suspend fun <T> execute(request: Request, decode: (JsonElement?) -> T?): T {
+        return try {
+            executeAttempt(request, decode)
+        } catch (error: UploadProtocolException) {
+            if (error.httpStatus != 401 && error.apiCode != 401) throw error
+            val renewedRequest = try {
+                http.refreshRequestAfterUnauthorized(request)
+            } catch (refreshError: OpenListApiException) {
+                throw UploadProtocolException(
+                    httpStatus = refreshError.httpStatus ?: 200,
+                    apiCode = refreshError.apiCode,
+                    message = refreshError.message,
+                    cause = refreshError,
+                )
+            } ?: throw error
+            executeAttempt(renewedRequest, decode)
+        }
+    }
+
+    private suspend fun <T> executeAttempt(request: Request, decode: (JsonElement?) -> T?): T {
         http.raw(request).use { response ->
             val text = response.body.string()
             val root = runCatching { JsonParser.parseString(text).asJsonObject }.getOrElse { error ->

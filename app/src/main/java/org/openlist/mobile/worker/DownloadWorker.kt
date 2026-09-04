@@ -116,6 +116,8 @@ class DownloadWorker(
             val jobHttpClient = jobSession.newHttpClient(
                 okHttpClient = application.container.httpClient.okHttpClient,
                 gson = application.container.httpClient.gson,
+                currentSnapshot = application.container.sessionAuthenticator::snapshot,
+                refreshSession = application.container.sessionAuthenticator::refresh,
                 isSessionCurrent = {
                     jobSession.matchesCurrent(application.container.sessionStore.snapshot())
                 },
@@ -125,6 +127,8 @@ class DownloadWorker(
                 gson = application.container.httpClient.gson,
                 remotePath = input.remotePath,
                 pathPassword = fixedPassword,
+                currentSnapshot = application.container.sessionAuthenticator::snapshot,
+                refreshSession = application.container.sessionAuthenticator::refresh,
                 isSessionCurrent = {
                     jobSession.matchesCurrent(application.container.sessionStore.snapshot())
                 },
@@ -336,7 +340,10 @@ class DownloadWorker(
             context = context,
             remotePath = remotePath,
             targetUri = targetUri,
-            sessionBinding = DownloadSessionBinding.create(settings.server, settings.token),
+            sessionBinding = DownloadSessionBinding.create(
+                settings.server,
+                settings.sessionBindingKey.ifBlank { settings.token },
+            ),
             expectedBytes = expectedBytes,
         )
 

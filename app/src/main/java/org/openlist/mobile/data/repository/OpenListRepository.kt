@@ -1,6 +1,7 @@
 package org.openlist.mobile.data.repository
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
@@ -14,14 +15,16 @@ import org.openlist.mobile.data.api.OpenListApiException
 import org.openlist.mobile.data.api.dto.SearchData
 import org.openlist.mobile.data.account.AccountId
 import org.openlist.mobile.data.auth.PasswordHasher
+import org.openlist.mobile.data.auth.LoginCredentialCipher
 import org.openlist.mobile.data.credentials.InMemoryPathCredentialStore
 import org.openlist.mobile.data.preferences.AppSettings
 import org.openlist.mobile.data.preferences.SessionStore
 
-class OpenListRepository(
+class OpenListRepository internal constructor(
     private val api: OpenListApi,
     private val sessionStore: SessionStore,
     private val pathCredentials: InMemoryPathCredentialStore,
+    private val credentialCipher: LoginCredentialCipher = LoginCredentialCipher(),
 ) {
     val settings: StateFlow<AppSettings> = sessionStore.settings
 
@@ -31,10 +34,11 @@ class OpenListRepository(
             pathCredentials.clear()
         }
         val targetAccountId = sessionStore.beginLogin(normalizedProfile)
+        val passwordHash = PasswordHasher.forOpenList(password)
         val login = try {
             api.loginWithHash(
                 normalizedProfile.username,
-                PasswordHasher.forOpenList(password),
+                passwordHash,
                 otpCode,
             )
         } catch (error: Throwable) {
@@ -47,7 +51,12 @@ class OpenListRepository(
         }
 
         val completion = try {
-            sessionStore.completeLogin(targetAccountId, normalizedProfile, login.token)
+            val encryptedPasswordHash = withContext(Dispatchers.IO) {
+                credentialCipher.encrypt(passwordHash, targetAccountId)
+            }
+            sessionStore.completeLogin(
+                targetAccountId, normalizedProfile, login.token, encryptedPasswordHash,
+            )
         } catch (error: Throwable) {
             failLoginTarget(targetAccountId, normalizedProfile)
             throw error

@@ -128,10 +128,13 @@ class UploadWorker(
                 currentUsername = persisted.server.username,
                 currentAllowInsecureHttp = persisted.server.allowInsecureHttp,
                 currentToken = persisted.token,
+                currentSessionBindingKey = persisted.sessionBindingKey.ifBlank { persisted.token },
             )
             val jobHttpClient = jobSession.newHttpClient(
                 okHttpClient = application.container.httpClient.okHttpClient,
                 gson = application.container.httpClient.gson,
+                currentSnapshot = application.container.sessionAuthenticator::snapshot,
+                refreshSession = application.container.sessionAuthenticator::refresh,
                 isSessionCurrent = {
                     val current = application.container.sessionStore.snapshot()
                     jobSession.matchesCurrent(
@@ -139,6 +142,7 @@ class UploadWorker(
                         username = current.server.username,
                         allowInsecureHttp = current.server.allowInsecureHttp,
                         token = current.token,
+                        sessionBindingKey = current.sessionBindingKey.ifBlank { current.token },
                     )
                 },
             )

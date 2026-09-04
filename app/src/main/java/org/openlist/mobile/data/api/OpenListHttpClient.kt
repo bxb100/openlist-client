@@ -17,6 +17,7 @@ import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.openlist.mobile.data.api.dto.ApiEnvelope
+import org.openlist.mobile.data.account.AccountId
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
 import java.io.IOException
@@ -29,7 +30,13 @@ data class HttpSessionSnapshot(
     val baseUrl: String,
     val token: String?,
     val allowInsecureHttp: Boolean,
-)
+    val accountId: AccountId? = null,
+    val sessionBindingKey: String = "",
+) {
+    override fun toString(): String =
+        "HttpSessionSnapshot(baseUrl=$baseUrl, token=<redacted>, " +
+            "allowInsecureHttp=$allowInsecureHttp, accountId=$accountId, sessionBindingKey=<redacted>)"
+}
 
 class OpenListHttpClient(
     private val baseUrl: () -> String,
@@ -38,6 +45,7 @@ class OpenListHttpClient(
     val okHttpClient: OkHttpClient = defaultOkHttpClient(),
     val gson: Gson = Gson(),
     private val sessionSnapshot: (() -> HttpSessionSnapshot)? = null,
+    private val refreshSession: (suspend (HttpSessionSnapshot) -> HttpSessionSnapshot?)? = null,
 ) {
     suspend inline fun <reified T> get(
         path: String,
@@ -72,22 +80,41 @@ class OpenListHttpClient(
         path: String,
         query: Map<String, String?> = emptyMap(),
         headers: Map<String, String> = emptyMap(),
+    ): Request.Builder = requestBuilder(path, query, headers, snapshot())
+
+    private fun snapshot(): HttpSessionSnapshot = sessionSnapshot?.invoke() ?: HttpSessionSnapshot(
+        baseUrl = baseUrl(),
+        token = token(),
+        allowInsecureHttp = allowInsecureHttp(),
+    )
+
+    private fun requestBuilder(
+        path: String,
+        query: Map<String, String?>,
+        headers: Map<String, String>,
+        session: HttpSessionSnapshot,
     ): Request.Builder {
-        val session = sessionSnapshot?.invoke()
-        val builder = Request.Builder().url(
-            resolveUrl(
-                path = path,
-                query = query,
-                serverBaseUrl = session?.baseUrl ?: baseUrl(),
-                insecureHttpAllowed = session?.allowInsecureHttp ?: allowInsecureHttp(),
-            ),
+        val url = resolveUrl(
+            path = path,
+            query = query,
+            serverBaseUrl = session.baseUrl,
+            insecureHttpAllowed = session.allowInsecureHttp,
         )
-        (session?.token ?: token())?.takeIf(String::isNotBlank)
+        val builder = Request.Builder().url(url)
+        session.token?.takeIf(String::isNotBlank)
             ?.let { builder.header("Authorization", it) }
         // Explicit caller headers win. This is required for protocol transports such as MCP,
         // WebDAV, and S3 that may intentionally authenticate independently of the app session.
         headers.forEach(builder::header)
         builder.header("User-Agent", USER_AGENT)
+        val normalizedPath = "/${path.trim('/')}"
+        if (normalizedPath.startsWith("/api/") &&
+            !normalizedPath.startsWith("/api/auth/login") &&
+            normalizedPath != "/api/auth/logout" &&
+            headers.keys.none { it.equals("Authorization", ignoreCase = true) }
+        ) {
+            builder.tag(RequestAuthentication::class.java, RequestAuthentication(session, url))
+        }
         return builder
     }
 
@@ -130,14 +157,50 @@ class OpenListHttpClient(
         body: RequestBody?,
         resultType: Type,
     ): Any {
-        val request = requestBuilder(path, query, headers)
+        val session = snapshot()
+        val request = requestBuilder(path, query, headers, session)
             .method(method, when {
                 method == "GET" || method == "HEAD" -> null
                 body != null -> body
                 else -> EMPTY_BODY
             })
             .build()
-        return okHttpClient.newCall(request).awaitMapped { response ->
+        return try {
+            execute(request, resultType)
+        } catch (error: OpenListApiException) {
+            if (error.apiCode != 401 && error.httpStatus != 401) throw error
+            val renewedRequest = refreshRequestAfterUnauthorized(request) ?: throw error
+            execute(renewedRequest, resultType)
+        }
+    }
+
+    /** Shared with the upload envelope parser; callers replay at most once after a 401. */
+    internal suspend fun refreshRequestAfterUnauthorized(request: Request): Request? {
+        val refresh = refreshSession ?: return null
+        val authentication = request.tag(RequestAuthentication::class.java) ?: return null
+        val session = authentication.session
+        if (session.token.isNullOrBlank() || request.url != authentication.url ||
+            request.header("Authorization") != session.token ||
+            request.body?.isOneShot() == true || request.body?.isDuplex() == true
+        ) return null
+        val renewed = refresh(session) ?: return null
+        if (renewed.baseUrl != session.baseUrl ||
+            renewed.accountId != session.accountId ||
+            renewed.allowInsecureHttp != session.allowInsecureHttp ||
+            renewed.sessionBindingKey != session.sessionBindingKey ||
+            renewed.token.isNullOrBlank()
+        ) return null
+        // Preserve the URL and body captured before the failure, even after an account switch.
+        return request.newBuilder()
+            .header("Authorization", renewed.token)
+            .tag(RequestAuthentication::class.java, null)
+            .build()
+    }
+
+    private class RequestAuthentication(val session: HttpSessionSnapshot, val url: HttpUrl)
+
+    private suspend fun execute(request: Request, resultType: Type): Any =
+        okHttpClient.newCall(request).awaitMapped { response ->
             val text = response.body.string()
             val root = runCatching { JsonParser.parseString(text).asJsonObject }.getOrElse { error ->
                 throw OpenListApiException(
@@ -168,7 +231,6 @@ class OpenListHttpClient(
             }
             gson.fromJson<Any>(data, resultType)
         }
-    }
 
     suspend inline fun <reified T> envelope(request: Request): ApiEnvelope<T> =
         okHttpClient.newCall(request).awaitMapped { response ->

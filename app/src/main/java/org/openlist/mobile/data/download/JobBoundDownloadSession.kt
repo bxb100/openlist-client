@@ -11,17 +11,20 @@ import org.openlist.mobile.media.MediaUrlResolver
 import org.openlist.mobile.media.OpenListMediaUrlResolver
 import org.openlist.mobile.media.normalizeRemotePath
 
-/** Authentication and routing captured once for a single background download job. */
+/** Fixed server and login identity for one download; tokens may renew within that login. */
 class JobBoundDownloadSession private constructor(
     val baseUrl: String,
     val username: String,
     private val allowInsecureHttp: Boolean,
     private val token: String,
+    private val sessionBindingKey: String,
     private val binding: DownloadSessionBinding,
 ) {
     fun newHttpClient(
         okHttpClient: OkHttpClient,
         gson: Gson,
+        currentSnapshot: (() -> HttpSessionSnapshot)? = null,
+        refreshSession: (suspend (HttpSessionSnapshot) -> HttpSessionSnapshot?)? = null,
         isSessionCurrent: () -> Boolean,
     ): OpenListHttpClient {
         val guard = Interceptor { chain ->
@@ -38,14 +41,39 @@ class JobBoundDownloadSession private constructor(
             baseUrl = baseUrl,
             token = token,
             allowInsecureHttp = allowInsecureHttp,
+            sessionBindingKey = sessionBindingKey,
         )
+        fun validateSnapshot(current: HttpSessionSnapshot): HttpSessionSnapshot {
+            if (!isSessionCurrent() ||
+                normalizeBaseUrl(current.baseUrl) != baseUrl ||
+                current.allowInsecureHttp != allowInsecureHttp ||
+                current.token.isNullOrBlank() ||
+                current.sessionBindingKey.ifBlank { current.token.orEmpty() } != sessionBindingKey
+            ) {
+                throw DownloadSessionChangedException()
+            }
+            return current
+        }
         return OpenListHttpClient(
             baseUrl = { fixed.baseUrl },
             token = { fixed.token },
             allowInsecureHttp = { fixed.allowInsecureHttp },
             okHttpClient = guardedClient,
             gson = gson,
-            sessionSnapshot = { fixed },
+            sessionSnapshot = {
+                if (currentSnapshot == null) fixed else {
+                    if (!isSessionCurrent()) throw DownloadSessionChangedException()
+                    validateSnapshot(currentSnapshot())
+                }
+            },
+            refreshSession = if (refreshSession == null) {
+                null
+            } else {
+                { expired ->
+                    validateSnapshot(expired)
+                    refreshSession(expired)?.let(::validateSnapshot)
+                }
+            },
         )
     }
 
@@ -55,11 +83,15 @@ class JobBoundDownloadSession private constructor(
         gson: Gson,
         remotePath: String,
         pathPassword: String,
+        currentSnapshot: (() -> HttpSessionSnapshot)? = null,
+        refreshSession: (suspend (HttpSessionSnapshot) -> HttpSessionSnapshot?)? = null,
         isSessionCurrent: () -> Boolean,
     ): MediaUrlResolver {
         val expectedPath = normalizeRemotePath(remotePath)
         val delegate = OpenListMediaUrlResolver(
-            api = OpenListApi(newHttpClient(okHttpClient, gson, isSessionCurrent)),
+            api = OpenListApi(
+                newHttpClient(okHttpClient, gson, currentSnapshot, refreshSession, isSessionCurrent),
+            ),
             passwordForPath = { requestedPath ->
                 if (normalizeRemotePath(requestedPath) == expectedPath) pathPassword else ""
             },
@@ -72,20 +104,27 @@ class JobBoundDownloadSession private constructor(
         }
     }
 
-    fun matchesCurrent(settings: AppSettings): Boolean = binding.matches(
-        DownloadSessionBinding.create(settings.server, settings.token),
-    )
+    fun matchesCurrent(settings: AppSettings): Boolean =
+        settings.token.isNotBlank() &&
+            settings.server.allowInsecureHttp == allowInsecureHttp &&
+            binding.matches(
+                DownloadSessionBinding.create(
+                    settings.server,
+                    settings.sessionBindingKey.ifBlank { settings.token },
+                ),
+            )
 
     fun matchesCurrent(
         baseUrl: String,
         username: String,
         allowInsecureHttp: Boolean,
         token: String,
+        sessionBindingKey: String = token,
     ): Boolean =
         normalizeBaseUrl(baseUrl) == this.baseUrl &&
             username == this.username &&
             allowInsecureHttp == this.allowInsecureHttp &&
-            token == this.token
+            token.isNotBlank() && sessionBindingKey == this.sessionBindingKey
 
     companion object {
         fun capture(
@@ -96,7 +135,8 @@ class JobBoundDownloadSession private constructor(
             if (normalizedBase.isBlank() || current.server.username.isBlank() || current.token.isBlank()) {
                 throw DownloadSessionChangedException("登录凭据已失效，请重新发起下载")
             }
-            val currentBinding = DownloadSessionBinding.create(current.server, current.token)
+            val sessionBindingKey = current.sessionBindingKey.ifBlank { current.token }
+            val currentBinding = DownloadSessionBinding.create(current.server, sessionBindingKey)
             if (!expectedBinding.matches(currentBinding)) {
                 throw DownloadSessionChangedException()
             }
@@ -105,6 +145,7 @@ class JobBoundDownloadSession private constructor(
                 username = current.server.username,
                 allowInsecureHttp = current.server.allowInsecureHttp,
                 token = current.token,
+                sessionBindingKey = sessionBindingKey,
                 binding = expectedBinding,
             )
         }

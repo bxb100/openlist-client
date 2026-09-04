@@ -264,7 +264,10 @@ class MainActivity : ComponentActivity(), LocalNetworkPermissionController {
             serverBaseUrl = settings.server.baseUrl,
             serverUsername = settings.server.username,
             serverAllowInsecureHttp = settings.server.allowInsecureHttp,
-            sessionBinding = UploadSessionBinding.create(settings.server, settings.token).value,
+            sessionBinding = UploadSessionBinding.create(
+                settings.server,
+                settings.sessionBindingKey.ifBlank { settings.token },
+            ).value,
         )
         requestNotificationPermissionIfNeeded()
         uploadDocumentLauncher.launch(arrayOf("*/*"))
@@ -290,7 +293,10 @@ class MainActivity : ComponentActivity(), LocalNetworkPermissionController {
             fileName = fileName,
             expectedBytes = item.size.takeIf { it >= 0L },
             mimeType = mimeType,
-            sessionBinding = DownloadSessionBinding.create(settings.server, settings.token).value,
+            sessionBinding = DownloadSessionBinding.create(
+                settings.server,
+                settings.sessionBindingKey.ifBlank { settings.token },
+            ).value,
         )
         requestNotificationPermissionIfNeeded()
         downloadDocumentLauncher.launch(
@@ -495,7 +501,7 @@ class MainActivity : ComponentActivity(), LocalNetworkPermissionController {
         }.getOrNull()
         val currentBinding = UploadSessionBinding.create(
             currentSettings.server,
-            currentSettings.token,
+            currentSettings.sessionBindingKey.ifBlank { currentSettings.token },
         )
         if (
             originalBinding == null ||
@@ -613,7 +619,10 @@ class MainActivity : ComponentActivity(), LocalNetworkPermissionController {
             val originalBinding = runCatching {
                 DownloadSessionBinding.parse(download.sessionBinding)
             }.getOrNull()
-            val currentBinding = DownloadSessionBinding.create(settings.server, settings.token)
+            val currentBinding = DownloadSessionBinding.create(
+                settings.server,
+                settings.sessionBindingKey.ifBlank { settings.token },
+            )
             if (originalBinding == null || !originalBinding.matches(currentBinding)) {
                 Toast.makeText(
                     this@MainActivity,

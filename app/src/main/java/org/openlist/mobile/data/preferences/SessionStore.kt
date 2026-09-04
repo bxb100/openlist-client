@@ -24,6 +24,7 @@ import org.openlist.mobile.core.model.CachePolicy
 import org.openlist.mobile.core.model.ServerProfile
 import org.openlist.mobile.data.account.AccountDraft
 import org.openlist.mobile.data.account.AccountId
+import org.openlist.mobile.data.account.AccountRecord
 import org.openlist.mobile.data.account.AccountState
 import org.openlist.mobile.data.account.AccountStateMachine
 import org.openlist.mobile.data.account.AccountSummary
@@ -39,11 +40,12 @@ data class AppSettings(
     val cachePolicy: CachePolicy = CachePolicy(),
     val dynamicColor: Boolean = true,
     val darkTheme: Boolean? = null,
+    val sessionBindingKey: String = "",
 ) {
     /** Keep the compatibility token readable by network code without making logs disclose it. */
     override fun toString(): String =
         "AppSettings(server=$server, token=<redacted>, cachePolicy=$cachePolicy, " +
-            "dynamicColor=$dynamicColor, darkTheme=$darkTheme)"
+            "dynamicColor=$dynamicColor, darkTheme=$darkTheme, sessionBindingKey=<redacted>)"
 }
 
 private data class DecodedSession(
@@ -110,6 +112,46 @@ class SessionStore(
 
     /** Atomic, token-free account view for validating serialized account mutations. */
     fun accountSnapshot(): List<AccountSummary> = currentAccounts.get().summaries()
+
+    internal fun authenticationSnapshot(): AccountRecord? = currentAccounts.get().active
+
+    /** Commits renewal only while the original active login is still current. */
+    internal suspend fun replaceAuthentication(
+        expected: AccountRecord,
+        token: String,
+        clearCredentials: Boolean = false,
+    ): Boolean {
+        require(clearCredentials || token.isNotBlank()) { "Renewed token must not be blank" }
+        var replaced = false
+        mutateAccounts { state ->
+            val active = state.active
+            if (state.activeId != expected.id || active == null ||
+                active.id != expected.id || active.server != expected.server ||
+                active.token != expected.token ||
+                active.sessionBindingKey != expected.sessionBindingKey ||
+                active.encryptedPasswordHash != expected.encryptedPasswordHash
+            ) {
+                state
+            } else {
+                replaced = true
+                AccountState(
+                    records = state.records.map { record ->
+                        if (record.id == expected.id) {
+                            record.updated(
+                                token = if (clearCredentials) "" else token,
+                                encryptedPasswordHash = if (clearCredentials) "" else record.encryptedPasswordHash,
+                                sessionBindingKey = if (clearCredentials) "" else record.sessionBindingKey,
+                            )
+                        } else {
+                            record
+                        }
+                    },
+                    activeId = state.activeId,
+                )
+            }
+        }
+        return replaced
+    }
 
     fun isActiveAccount(id: AccountId, expectedProfile: ServerProfile): Boolean {
         val state = currentAccounts.get()
@@ -186,6 +228,7 @@ class SessionStore(
         accountId: AccountId,
         expectedProfile: ServerProfile,
         token: String,
+        encryptedPasswordHash: String = "",
     ): LoginCompletion {
         var completion: LoginCompletion? = null
         mutateAccounts { state ->
@@ -194,6 +237,7 @@ class SessionStore(
                 id = accountId,
                 expectedProfile = expectedProfile,
                 token = token,
+                encryptedPasswordHash = encryptedPasswordHash,
             ).also { completion = it.completion }.state
         }
         return requireNotNull(completion)
@@ -309,6 +353,7 @@ class SessionStore(
             settings = AppSettings(
                 server = active?.server ?: ServerProfile(),
                 token = active?.token.orEmpty(),
+                sessionBindingKey = active?.sessionBindingKey.orEmpty(),
                 cachePolicy = CachePolicy(
                     maxBytes = preferences[Keys.CACHE_BYTES] ?: CachePolicy().maxBytes,
                     maxAgeMillis = preferences[Keys.CACHE_AGE] ?: CachePolicy().maxAgeMillis,

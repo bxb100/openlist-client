@@ -39,7 +39,7 @@ data class AccountDraft(
 )
 
 /**
- * Persisted internal account record. Its string representation always redacts the token so an
+ * Persisted internal account record. Its string representation always redacts credentials so an
  * accidental diagnostic log cannot disclose credentials.
  */
 internal class AccountRecord(
@@ -47,12 +47,18 @@ internal class AccountRecord(
     val displayName: String,
     val server: ServerProfile,
     val token: String,
+    val encryptedPasswordHash: String = "",
+    val sessionBindingKey: String = "",
 ) {
     fun updated(
         displayName: String = this.displayName,
         server: ServerProfile = this.server,
         token: String = this.token,
-    ): AccountRecord = AccountRecord(id, displayName, server, token)
+        encryptedPasswordHash: String = this.encryptedPasswordHash,
+        sessionBindingKey: String = this.sessionBindingKey,
+    ): AccountRecord = AccountRecord(
+        id, displayName, server, token, encryptedPasswordHash, sessionBindingKey,
+    )
 
     fun summary(isActive: Boolean): AccountSummary = AccountSummary(
         id = id,
@@ -64,7 +70,8 @@ internal class AccountRecord(
     )
 
     override fun toString(): String =
-        "AccountRecord(id=$id, displayName=$displayName, server=$server, token=<redacted>)"
+        "AccountRecord(id=$id, displayName=$displayName, server=$server, token=<redacted>, " +
+            "encryptedPasswordHash=<redacted>, sessionBindingKey=<redacted>)"
 }
 
 internal class AccountState(
@@ -113,6 +120,7 @@ internal object AccountStateMachine {
             displayName = defaultAccountDisplayName(legacy.server),
             server = legacy.server,
             token = legacy.token,
+            sessionBindingKey = legacy.token,
         )
         return AccountState(listOf(record), id)
     }
@@ -160,6 +168,8 @@ internal object AccountStateMachine {
                             ?: record.displayName,
                         server = server,
                         token = "",
+                        encryptedPasswordHash = "",
+                        sessionBindingKey = "",
                     )
                 } else {
                     record
@@ -189,6 +199,8 @@ internal object AccountStateMachine {
                         displayName = draft.displayName.normalizedDisplayName(server),
                         server = server,
                         token = if (identityChanged) "" else record.token,
+                        encryptedPasswordHash = if (identityChanged) "" else record.encryptedPasswordHash,
+                        sessionBindingKey = if (identityChanged) "" else record.sessionBindingKey,
                     )
                 } else {
                     record
@@ -214,7 +226,15 @@ internal object AccountStateMachine {
         state.requireAccount(id)
         return AccountState(
             records = state.records.map { record ->
-                if (record.id == id) record.updated(token = token) else record
+                if (record.id == id) {
+                    record.updated(
+                        token = token,
+                        encryptedPasswordHash = if (token.isBlank()) "" else record.encryptedPasswordHash,
+                        sessionBindingKey = if (token.isBlank()) "" else record.sessionBindingKey,
+                    )
+                } else {
+                    record
+                }
             },
             activeId = state.activeId,
         )
@@ -230,13 +250,27 @@ internal object AccountStateMachine {
         id: AccountId,
         expectedProfile: ServerProfile,
         token: String,
+        encryptedPasswordHash: String = "",
     ): LoginCompletionMutation {
         require(token.isNotBlank()) { "Login token must not be blank" }
         val expected = normalizeNewProfile(expectedProfile)
         val target = state.requireAccount(id)
         if (target.server != expected) throw StaleLoginAttemptException(id)
         return LoginCompletionMutation(
-            state = setToken(state, id, token),
+            state = AccountState(
+                records = state.records.map { record ->
+                    if (record.id == id) {
+                        record.updated(
+                            token = token,
+                            encryptedPasswordHash = encryptedPasswordHash,
+                            sessionBindingKey = token,
+                        )
+                    } else {
+                        record
+                    }
+                },
+                activeId = state.activeId,
+            ),
             completion = LoginCompletion(id, state.activeId == id),
         )
     }
