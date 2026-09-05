@@ -2,6 +2,7 @@ package org.openlist.mobile.ui
 
 import android.os.Build
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -11,12 +12,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -24,9 +27,13 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Cached
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -40,6 +47,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -54,8 +63,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -65,12 +76,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -80,11 +93,17 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.openlist.mobile.core.model.CachePolicy
 import org.openlist.mobile.data.preferences.SessionStore
+import org.openlist.mobile.data.cache.CacheStats
+import org.openlist.mobile.ui.designsystem.OpenListLayout
+import org.openlist.mobile.ui.designsystem.OpenListSpacing
+import org.openlist.mobile.ui.designsystem.OpenListSectionHeader
+import org.openlist.mobile.ui.filter.FileVisibilityRulesDialog
+import org.openlist.mobile.ui.theme.OpenListTheme
 import java.text.DecimalFormat
 
 private const val BYTES_PER_GIB = 1_073_741_824L
 private const val MILLIS_PER_DAY = 86_400_000L
-private val SETTINGS_MAX_CONTENT_WIDTH = 720.dp
+private val SETTINGS_MAX_CONTENT_WIDTH = OpenListLayout.contentMaxWidth
 
 internal object SettingsUiTags {
     const val ACCOUNT_CARD = "settings_account_card"
@@ -93,7 +112,10 @@ internal object SettingsUiTags {
     const val THEME_LIGHT = "settings_theme_light"
     const val THEME_DARK = "settings_theme_dark"
     const val DYNAMIC_COLOR_SWITCH = "settings_dynamic_color_switch"
+    const val FILE_VISIBILITY = "settings_file_visibility"
     const val CACHE_STATUS = "settings_cache_status"
+    const val CACHE_USAGE = "settings_cache_usage"
+    const val CACHE_ADVANCED = "settings_cache_advanced"
     const val CACHE_SIZE = "settings_cache_size"
     const val CACHE_AGE = "settings_cache_age"
     const val CACHE_ENTRIES = "settings_cache_entries"
@@ -120,10 +142,27 @@ internal fun SettingsScreen(
     sessionStore: SessionStore,
     operationBusy: Boolean,
     onAccountsRequested: () -> Unit,
-    onClearCacheRequested: () -> Unit,
+    onClearCacheRequested: suspend () -> Unit,
     onLogoutRequested: suspend () -> Unit,
+    onCacheUsageRequested: suspend () -> CacheStats? = { null },
 ) {
     val settings by sessionStore.settings.collectAsStateWithLifecycle()
+    var cacheStats by remember { mutableStateOf<CacheStats?>(null) }
+    var cacheUsageLoading by remember { mutableStateOf(true) }
+    var cacheRevision by remember { mutableIntStateOf(0) }
+    var showFileVisibilityRules by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(cacheRevision, settings.cachePolicy) {
+        cacheUsageLoading = true
+        try {
+            cacheStats = onCacheUsageRequested()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            cacheStats = null
+        } finally {
+            cacheUsageLoading = false
+        }
+    }
 
     SettingsPageContent(
         serverBaseUrl = settings.server.baseUrl,
@@ -136,9 +175,25 @@ internal fun SettingsScreen(
         onAccountsRequested = onAccountsRequested,
         onAppearanceChanged = sessionStore::setAppearance,
         onCachePolicySave = sessionStore::setCachePolicy,
-        onClearCacheRequested = onClearCacheRequested,
+        onClearCacheRequested = {
+            onClearCacheRequested()
+            cacheRevision++
+        },
         onLogoutRequested = onLogoutRequested,
+        cacheStats = cacheStats,
+        cacheUsageLoading = cacheUsageLoading,
+        onRefreshCacheUsage = { cacheRevision++ },
+        fileVisibilityRuleCount = settings.fileVisibilityRules.size,
+        onFileVisibilityRulesRequested = { showFileVisibilityRules = true },
     )
+
+    if (showFileVisibilityRules) {
+        FileVisibilityRulesDialog(
+            rules = settings.fileVisibilityRules,
+            onSave = sessionStore::updateFileVisibilityRules,
+            onDismiss = { showFileVisibilityRules = false },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -154,9 +209,14 @@ internal fun SettingsPageContent(
     onAccountsRequested: () -> Unit,
     onAppearanceChanged: suspend (dynamicColor: Boolean, darkTheme: Boolean?) -> Unit,
     onCachePolicySave: suspend (CachePolicy) -> Unit,
-    onClearCacheRequested: () -> Unit,
+    onClearCacheRequested: suspend () -> Unit,
     onLogoutRequested: suspend () -> Unit,
     modifier: Modifier = Modifier,
+    cacheStats: CacheStats? = null,
+    cacheUsageLoading: Boolean = false,
+    onRefreshCacheUsage: () -> Unit = {},
+    fileVisibilityRuleCount: Int = 0,
+    onFileVisibilityRulesRequested: () -> Unit = {},
 ) {
     var cacheSizeGiB by rememberSaveable(cachePolicy.maxBytes) {
         mutableStateOf(formatDecimal(cachePolicy.maxBytes.toDouble() / BYTES_PER_GIB))
@@ -170,6 +230,8 @@ internal fun SettingsPageContent(
     var clearConfirmation by rememberSaveable { mutableStateOf(false) }
     var logoutConfirmation by rememberSaveable { mutableStateOf(false) }
     var cacheSaving by remember { mutableStateOf(false) }
+    var cacheClearing by remember { mutableStateOf(false) }
+    var showCachePolicy by rememberSaveable { mutableStateOf(false) }
     var appearanceSaving by remember { mutableStateOf(false) }
     var logoutInProgress by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -211,12 +273,17 @@ internal fun SettingsPageContent(
         modifier = modifier
             .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = { TopAppBar(title = { Text("设置") }, scrollBehavior = scrollBehavior) },
+        topBar = {
+            TopAppBar(
+                title = { Text("设置", style = MaterialTheme.typography.headlineSmall) },
+                scrollBehavior = scrollBehavior,
+            )
+        },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { contentPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(contentPadding),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            contentPadding = PaddingValues(horizontal = OpenListLayout.pagePadding, vertical = OpenListSpacing.medium),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             item {
@@ -281,6 +348,29 @@ internal fun SettingsPageContent(
 
             item {
                 SettingsSection(
+                    title = "文件显示",
+                    icon = { Icon(Icons.Default.FilterAlt, contentDescription = null) },
+                ) {
+                    ListItem(
+                        headlineContent = { Text("自定义筛选规则") },
+                        supportingContent = {
+                            Text(
+                                if (fileVisibilityRuleCount == 0) "显示所有文件和文件夹"
+                                else "$fileVisibilityRuleCount 条规则 · 按名称显示或隐藏文件",
+                            )
+                        },
+                        trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) },
+                        colors = transparentListItemColors(),
+                        modifier = Modifier.fillMaxWidth().testTag(SettingsUiTags.FILE_VISIBILITY)
+                            .clickable(role = Role.Button, onClick = onFileVisibilityRulesRequested),
+                    )
+                }
+            }
+
+            item { Spacer(Modifier.height(20.dp)) }
+
+            item {
+                SettingsSection(
                     title = "外观",
                     icon = { Icon(Icons.Default.Palette, contentDescription = null) },
                 ) {
@@ -294,7 +384,22 @@ internal fun SettingsPageContent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.labelLarge,
                         )
-                        SingleChoiceSegmentedButtonRow(
+                        if (LocalDensity.current.fontScale > 1.3f) {
+                            Column(Modifier.testTag(SettingsUiTags.THEME_SELECTOR)) {
+                                ThemeMode.entries.forEach { mode ->
+                                    ListItem(
+                                        headlineContent = { Text(mode.label) },
+                                        leadingContent = { RadioButton(selected = darkTheme == mode.value, onClick = null) },
+                                        colors = transparentListItemColors(),
+                                        modifier = Modifier
+                                            .testTag(mode.tag)
+                                            .selectable(selected = darkTheme == mode.value, enabled = !appearanceSaving, role = Role.RadioButton) {
+                                                updateAppearance(dynamicColor, mode.value)
+                                            },
+                                    )
+                                }
+                            }
+                        } else SingleChoiceSegmentedButtonRow(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp)
@@ -360,91 +465,117 @@ internal fun SettingsPageContent(
                     icon = { Icon(Icons.Default.Cached, contentDescription = null) },
                 ) {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        CacheStatusSummary(
-                            currentEnabled = cachePolicy.cacheEnabled,
-                            editedEnabled = cacheValidation.cacheEnabled,
-                            isDirty = cacheDirty,
-                        )
-                        HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp),
-                        ) {
-                            Text(
-                                "缓存同时受容量、保留时间和文件数限制；达到任一上限时会优先清理较旧内容。",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            CachePolicyFields(
-                                sizeGiB = cacheSizeGiB,
-                                onSizeGiBChange = { cacheSizeGiB = sanitizeDecimal(it) },
-                                ageDays = cacheAgeDays,
-                                onAgeDaysChange = { cacheAgeDays = sanitizeDecimal(it) },
-                                entries = cacheEntries,
-                                onEntriesChange = {
-                                    cacheEntries = it.filter(Char::isDigit).take(10)
+                        CacheUsageSummary(cacheStats, cacheUsageLoading, cacheClearing, onRefreshCacheUsage)
+                        HorizontalDivider(Modifier.padding(horizontal = OpenListSpacing.large))
+                        ListItem(
+                            headlineContent = { Text("缓存策略") },
+                            supportingContent = {
+                                Text(
+                                    if (cachePolicy.cacheEnabled) {
+                                        "${formatDecimal(cachePolicy.maxBytes.toDouble() / BYTES_PER_GIB)} GB · " +
+                                            "${formatDecimal(cachePolicy.maxAgeMillis.toDouble() / MILLIS_PER_DAY)} 天 · " +
+                                            "${cachePolicy.maxEntries} 个文件"
+                                    } else "不保存新缓存",
+                                )
+                            },
+                            trailingContent = { Icon(if (showCachePolicy) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null) },
+                            colors = transparentListItemColors(),
+                            modifier = Modifier.fillMaxWidth()
+                                .testTag(SettingsUiTags.CACHE_ADVANCED)
+                                .semantics { stateDescription = if (showCachePolicy) "已展开" else "已收起" }
+                                .clickable(role = Role.Button, onClickLabel = if (showCachePolicy) "收起缓存策略" else "编辑缓存策略") {
+                                    showCachePolicy = !showCachePolicy
                                 },
-                                validation = cacheValidation,
-                                enabled = !cacheSaving,
-                            )
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                if (cacheDirty) {
-                                    TextButton(
-                                        onClick = ::resetCacheEditor,
-                                        enabled = !cacheSaving,
-                                        modifier = Modifier.testTag(SettingsUiTags.CACHE_REVERT),
-                                    ) {
-                                        Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null)
-                                        Spacer(Modifier.width(8.dp))
-                                        Text("撤销更改")
-                                    }
-                                }
-                                Button(
-                                    onClick = {
-                                        val updated = editedCachePolicy ?: return@Button
-                                        cacheSaving = true
-                                        scope.launch {
-                                            var snackbarMessage = "缓存设置已保存"
-                                            try {
-                                                onCachePolicySave(updated)
-                                            } catch (cancelled: CancellationException) {
-                                                throw cancelled
-                                            } catch (error: Throwable) {
-                                                snackbarMessage = actionFailureMessage(
-                                                    "保存缓存设置失败",
-                                                    error,
-                                                )
-                                            } finally {
-                                                cacheSaving = false
-                                            }
-                                            snackbarHostState.showSnackbar(snackbarMessage)
-                                        }
-                                    },
-                                    enabled = cacheDirty && cacheValidation.isValid && !cacheSaving,
-                                    modifier = Modifier.testTag(SettingsUiTags.CACHE_SAVE),
+                        )
+                        AnimatedVisibility(showCachePolicy) {
+                            Column {
+                                CacheStatusSummary(
+                                    currentEnabled = cachePolicy.cacheEnabled,
+                                    editedEnabled = cacheValidation.cacheEnabled,
+                                    isDirty = cacheDirty,
+                                )
+                                HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                                Column(
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(14.dp),
                                 ) {
-                                    if (cacheSaving) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(18.dp),
-                                            color = MaterialTheme.colorScheme.onPrimary,
-                                            strokeWidth = 2.dp,
-                                        )
-                                    } else {
-                                        Icon(Icons.Default.Save, contentDescription = null)
+                                    Text(
+                                        "缓存同时受容量、保留时间和文件数限制；达到任一上限时会优先清理较旧内容。",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    CachePolicyFields(
+                                        sizeGiB = cacheSizeGiB,
+                                        onSizeGiBChange = { cacheSizeGiB = sanitizeDecimal(it) },
+                                        ageDays = cacheAgeDays,
+                                        onAgeDaysChange = { cacheAgeDays = sanitizeDecimal(it) },
+                                        entries = cacheEntries,
+                                        onEntriesChange = {
+                                            cacheEntries = it.filter(Char::isDigit).take(10)
+                                        },
+                                        validation = cacheValidation,
+                                        enabled = !cacheSaving,
+                                    )
+                                    androidx.compose.foundation.layout.FlowRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        if (cacheDirty) {
+                                            TextButton(
+                                                onClick = ::resetCacheEditor,
+                                                enabled = !cacheSaving,
+                                                modifier = Modifier.testTag(SettingsUiTags.CACHE_REVERT),
+                                            ) {
+                                                Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null)
+                                                Spacer(Modifier.width(8.dp))
+                                                Text("撤销更改")
+                                            }
+                                        }
+                                        Button(
+                                            onClick = {
+                                                val updated = editedCachePolicy ?: return@Button
+                                                cacheSaving = true
+                                                scope.launch {
+                                                    var snackbarMessage = "缓存设置已保存"
+                                                    try {
+                                                        onCachePolicySave(updated)
+                                                    } catch (cancelled: CancellationException) {
+                                                        throw cancelled
+                                                    } catch (error: Throwable) {
+                                                        snackbarMessage = actionFailureMessage(
+                                                            "保存缓存设置失败",
+                                                            error,
+                                                        )
+                                                    } finally {
+                                                        cacheSaving = false
+                                                    }
+                                                    snackbarHostState.showSnackbar(snackbarMessage)
+                                                }
+                                            },
+                                            enabled = cacheDirty && cacheValidation.isValid && !cacheSaving,
+                                            modifier = Modifier.testTag(SettingsUiTags.CACHE_SAVE),
+                                        ) {
+                                            if (cacheSaving) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(18.dp),
+                                                    color = MaterialTheme.colorScheme.onPrimary,
+                                                    strokeWidth = 2.dp,
+                                                )
+                                            } else {
+                                                Icon(Icons.Default.Save, contentDescription = null)
+                                            }
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(if (cacheSaving) "保存中" else "保存")
+                                        }
                                     }
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(if (cacheSaving) "保存中" else "保存")
                                 }
                             }
                         }
                         HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                         ListItem(
                             headlineContent = {
-                                Text("清空现有缓存", color = MaterialTheme.colorScheme.error)
+                                Text(if (cacheClearing) "正在清理缓存" else "清空现有缓存", color = MaterialTheme.colorScheme.error)
                             },
                             supportingContent = {
                                 Text("移除已缓存的媒体和文件，不会更改以上限制")
@@ -461,7 +592,7 @@ internal fun SettingsPageContent(
                                 .fillMaxWidth()
                                 .testTag(SettingsUiTags.CACHE_CLEAR)
                                 .clickable(
-                                    enabled = !cacheSaving,
+                                    enabled = !cacheSaving && !cacheClearing,
                                     role = Role.Button,
                                     onClickLabel = "清空离线缓存",
                                     onClick = { clearConfirmation = true },
@@ -505,17 +636,19 @@ internal fun SettingsPageContent(
                 TextButton(
                     onClick = {
                         clearConfirmation = false
-                        try {
-                            onClearCacheRequested()
-                            scope.launch { snackbarHostState.showSnackbar("清空请求已提交") }
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (error: Throwable) {
-                            scope.launch {
-                                snackbarHostState.showSnackbar(
-                                    actionFailureMessage("清空缓存失败", error),
-                                )
+                        cacheClearing = true
+                        scope.launch {
+                            var message = "已清理可释放的缓存"
+                            try {
+                                onClearCacheRequested()
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (error: Throwable) {
+                                message = actionFailureMessage("清空缓存失败", error)
+                            } finally {
+                                cacheClearing = false
                             }
+                            snackbarHostState.showSnackbar(message)
                         }
                     },
                     colors = ButtonDefaults.textButtonColors(
@@ -581,27 +714,65 @@ private fun SettingsSection(
 ) {
     Column(Modifier.widthIn(max = SETTINGS_MAX_CONTENT_WIDTH).fillMaxWidth()) {
         Row(
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = OpenListSpacing.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             icon()
-            Spacer(Modifier.width(10.dp))
-            Text(
-                title,
-                modifier = Modifier.semantics { heading() },
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.titleMedium,
-            )
+            Spacer(Modifier.width(OpenListSpacing.medium))
+            OpenListSectionHeader(title, modifier = Modifier.weight(1f))
         }
-        Card(
+        Surface(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
+            color = MaterialTheme.colorScheme.surface,
         ) {
             content()
         }
     }
+}
+
+@Composable
+private fun CacheUsageSummary(
+    stats: CacheStats?,
+    loading: Boolean,
+    clearing: Boolean,
+    onRefresh: () -> Unit,
+) {
+    ListItem(
+        headlineContent = {
+            Text(
+                when {
+                    stats != null -> "${formatCacheBytes(stats.totalBytes)} 已使用"
+                    loading -> "正在计算缓存占用"
+                    else -> "暂时无法读取缓存占用"
+                },
+                style = MaterialTheme.typography.titleMedium,
+            )
+        },
+        supportingContent = {
+            Text(
+                when {
+                    stats == null -> "缓存用于加快再次打开文件，可随时清理"
+                    stats.activeLeaseCount > 0 -> "${stats.entryCount} 个文件 · 正在使用的内容会在释放后清理"
+                    else -> "${stats.entryCount} 个文件 · 清理不会删除服务器上的原文件"
+                },
+            )
+        },
+        trailingContent = {
+            IconButton(onClick = onRefresh, enabled = !loading && !clearing) {
+                if (loading) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                else Icon(Icons.Default.Refresh, contentDescription = "刷新缓存占用")
+            }
+        },
+        colors = transparentListItemColors(),
+        modifier = Modifier.testTag(SettingsUiTags.CACHE_USAGE),
+    )
+}
+
+private fun formatCacheBytes(bytes: Long): String = when {
+    bytes >= BYTES_PER_GIB -> "${formatDecimal(bytes.toDouble() / BYTES_PER_GIB)} GB"
+    bytes >= 1_048_576 -> "${formatDecimal(bytes.toDouble() / 1_048_576)} MB"
+    bytes >= 1_024 -> "${formatDecimal(bytes.toDouble() / 1_024)} KB"
+    else -> "$bytes B"
 }
 
 @Composable
@@ -834,7 +1005,7 @@ private fun actionFailureMessage(action: String, error: Throwable): String {
 @Preview(name = "Settings phone", showBackground = true, widthDp = 412, heightDp = 915)
 @Composable
 private fun SettingsPhonePreview() {
-    MaterialTheme {
+    OpenListTheme {
         SettingsPageContent(
             serverBaseUrl = "https://openlist.example.com",
             username = "xiaobo",
@@ -855,7 +1026,7 @@ private fun SettingsPhonePreview() {
 @Preview(name = "Settings tablet", showBackground = true, widthDp = 840, heightDp = 1100)
 @Composable
 private fun SettingsTabletPreview() {
-    MaterialTheme {
+    OpenListTheme(darkTheme = true) {
         SettingsPageContent(
             serverBaseUrl = "https://openlist.example.com",
             username = "xiaobo",

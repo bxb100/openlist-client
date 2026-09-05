@@ -11,7 +11,7 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/** Keeps the reusable login hash encrypted with a device-local, non-exportable key. */
+/** Encrypts saved login credentials with a device-local, non-exportable key. */
 internal class LoginCredentialCipher {
     private val keyStore by lazy {
         KeyStore.getInstance(KEY_STORE).apply { load(null) }
@@ -19,10 +19,22 @@ internal class LoginCredentialCipher {
 
     fun encrypt(passwordHash: String, accountId: AccountId): String {
         require(passwordHash.isNotBlank()) { "Login hash must not be blank" }
+        return encryptValue(passwordHash, accountId.value)
+    }
+
+    fun encryptPassword(password: String, accountId: AccountId): String {
+        require(password.isNotBlank()) { "Login password must not be blank" }
+        return encryptValue(password, "password:${accountId.value}")
+    }
+
+    fun decryptPassword(value: String, accountId: AccountId): String =
+        decryptValue(value, "password:${accountId.value}")
+
+    private fun encryptValue(value: String, associatedData: String): String {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, encryptionKey())
-        cipher.updateAAD(accountId.value.toByteArray(Charsets.UTF_8))
-        val encrypted = cipher.doFinal(passwordHash.toByteArray(Charsets.UTF_8))
+        cipher.updateAAD(associatedData.toByteArray(Charsets.UTF_8))
+        val encrypted = cipher.doFinal(value.toByteArray(Charsets.UTF_8))
         require(cipher.iv.size == NONCE_BYTES) { "Unexpected credential nonce length" }
         return listOf(
             FORMAT_VERSION,
@@ -31,7 +43,9 @@ internal class LoginCredentialCipher {
         ).joinToString(":")
     }
 
-    fun decrypt(value: String, accountId: AccountId): String {
+    fun decrypt(value: String, accountId: AccountId): String = decryptValue(value, accountId.value)
+
+    private fun decryptValue(value: String, associatedData: String): String {
         val parts = value.split(':')
         require(parts.size == 3 && parts[0] == FORMAT_VERSION) { "Invalid encrypted credential format" }
         val nonce = Base64.decode(parts[1], Base64.NO_WRAP)
@@ -45,9 +59,9 @@ internal class LoginCredentialCipher {
         }
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, nonce))
-        cipher.updateAAD(accountId.value.toByteArray(Charsets.UTF_8))
+        cipher.updateAAD(associatedData.toByteArray(Charsets.UTF_8))
         return cipher.doFinal(encrypted).toString(Charsets.UTF_8)
-            .also { require(it.isNotBlank()) { "Decrypted login hash must not be blank" } }
+            .also { require(it.isNotBlank()) { "Decrypted login credential must not be blank" } }
     }
 
     private fun encryptionKey(): SecretKey = synchronized(KEY_LOCK) {

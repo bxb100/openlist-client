@@ -19,12 +19,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.work.WorkManager
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -41,7 +39,6 @@ import org.openlist.mobile.media.OpenListPlaybackController
 import org.openlist.mobile.media.OpenListPlaybackService
 import org.openlist.mobile.media.PlaybackOverlay
 import org.openlist.mobile.ui.OpenListApp
-import org.openlist.mobile.ui.UploadStatusHost
 import org.openlist.mobile.ui.theme.OpenListTheme
 import org.openlist.mobile.worker.DownloadWorker
 import org.openlist.mobile.worker.UploadWorker
@@ -49,6 +46,10 @@ import org.openlist.mobile.data.download.DownloadSessionBinding
 import org.openlist.mobile.data.download.DownloadUniqueEnqueueResult
 import org.openlist.mobile.data.upload.UploadSessionBinding
 import org.openlist.mobile.data.upload.UploadUniqueEnqueueResult
+import org.openlist.mobile.media.isVideo
+import org.openlist.mobile.media.playbackShowsPause
+import org.openlist.mobile.media.performPlaybackToggle
+import androidx.media3.common.Player
 
 class MainActivity : ComponentActivity(), LocalNetworkPermissionController {
     private var localNetworkPermissionResult: ((Boolean) -> Unit)? = null
@@ -142,10 +143,6 @@ class MainActivity : ComponentActivity(), LocalNetworkPermissionController {
             var observedPlaybackConnection by remember {
                 mutableStateOf<PlaybackConnectionSnapshot?>(null)
             }
-            val uploadWorkManager = remember { WorkManager.getInstance(applicationContext) }
-            val uploadWorkInfos by remember(uploadWorkManager) {
-                uploadWorkManager.getWorkInfosByTagFlow(UploadWorker.WORK_TAG)
-            }.collectAsStateWithLifecycle(initialValue = emptyList())
             LaunchedEffect(playbackInvalidation) {
                 if (playbackInvalidation > 0L) {
                     releasePlaybackController(stopPlayback = true)
@@ -175,6 +172,37 @@ class MainActivity : ComponentActivity(), LocalNetworkPermissionController {
                             openMedia(container, path, item, siblings)
                         },
                         hasPlaybackQueue = hasPlaybackQueue,
+                        playbackTitle = playbackState?.currentItem?.mediaMetadata?.title?.toString(),
+                        playbackIsPlaying = playbackState?.let {
+                            playbackShowsPause(it.playWhenReady, it.playbackState)
+                        } == true,
+                        playbackIsVideo = playbackState?.currentItem?.isVideo == true,
+                        playbackStatusLabel = playbackState?.let { state ->
+                            when {
+                                state.playbackState == Player.STATE_ENDED -> "播放已结束"
+                                state.playbackState == Player.STATE_IDLE -> "待播放"
+                                state.playbackState == Player.STATE_BUFFERING && state.playWhenReady -> "正在缓冲"
+                                state.isPlaying -> "正在播放"
+                                state.playWhenReady -> "等待播放"
+                                else -> "已暂停"
+                            }
+                        },
+                        playbackActionLabel = if (playbackState?.playbackState == Player.STATE_ENDED) "重新播放" else "继续播放",
+                        onPlaybackToggle = {
+                            playbackController?.let { controller ->
+                                val state = controller.state.value
+                                performPlaybackToggle(
+                                    playWhenReady = state.playWhenReady,
+                                    playbackState = state.playbackState,
+                                    pause = controller::pause,
+                                    seekToStart = { controller.seekTo(0L) },
+                                    play = {
+                                        if (state.currentItem?.isVideo == true) showPlaybackOverlay = true
+                                        controller.play()
+                                    },
+                                )
+                            }
+                        },
                         onPlaybackQueueRequested = {
                             if (playbackController?.state?.value?.queue?.isNotEmpty() == true) {
                                 showPlaybackOverlay = true
@@ -182,17 +210,11 @@ class MainActivity : ComponentActivity(), LocalNetworkPermissionController {
                         },
                         onUploadRequested = ::selectFileForUpload,
                         onDownloadRequested = ::selectDownloadDestination,
-                        onClearCacheRequested = {
-                            lifecycleScope.launch { container.clearCache() }
+                        onClearCacheRequested = { container.clearCache() },
+                        onCacheUsageRequested = {
+                            withContext(Dispatchers.IO) { container.cacheManager.stats() }
                         },
                     )
-                    if (!showPlaybackOverlay) {
-                        UploadStatusHost(
-                            workInfos = uploadWorkInfos,
-                            onCancel = { id -> UploadWorker.cancel(applicationContext, id) },
-                            modifier = Modifier.align(Alignment.BottomCenter),
-                        )
-                    }
                     if (showPlaybackOverlay) {
                         playbackController?.let { controller ->
                             PlaybackOverlay(

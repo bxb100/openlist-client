@@ -5,6 +5,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.openlist.mobile.core.model.DirectoryListing
+import org.openlist.mobile.core.model.FileVisibilityAction
+import org.openlist.mobile.core.model.FileVisibilityRule
+import org.openlist.mobile.core.model.FileVisibilityTarget
 import org.openlist.mobile.core.model.MediaKind
 import org.openlist.mobile.core.model.OpenListObject
 import java.io.IOException
@@ -66,7 +69,7 @@ class MediaSequenceBuilderTest {
     }
 
     @Test
-    fun `video sequence attaches only matching same directory subtitles to every video`() = runTest {
+    fun `video sequence still attaches matching subtitles when visibility rules hide sidecars`() = runTest {
         val listing = DirectoryListing(
             content = listOf(
                 objectOf("episode.mkv", type = 4),
@@ -81,6 +84,7 @@ class MediaSequenceBuilderTest {
         val builder = MediaSequenceBuilder(
             directorySource = DirectoryMediaSource { listing },
             serverIdentity = { "server" },
+            visibilityRules = { listOf(hide("*.srt"), hide("*.ass"), hide("*.vtt")) },
         )
 
         val sequence = builder.build("/shows/episode.mkv", objectOf("episode.mkv", type = 4))
@@ -127,6 +131,90 @@ class MediaSequenceBuilderTest {
         assertThat(sequence.current.size).isEqualTo(42)
         assertThat(sequence.current.modified).isEqualTo("selected")
         assertThat(sequence.current.subtitles.map(SubtitleEntry::name)).containsExactly("episode.srt")
+    }
+
+    @Test
+    fun `directory queue snapshots rules before listing and preserves selected item when hidden`() = runTest {
+        val siblings = listOf(
+            objectOf("before.mp3"),
+            objectOf("hidden-one.mp3"),
+            objectOf("selected.mp3"),
+            objectOf("hidden-two.mp3"),
+            objectOf("after.mp3"),
+        )
+        var rules = listOf(hide("hidden*"), hide("selected*"))
+        val listedDirectories = mutableListOf<String>()
+        val builder = MediaSequenceBuilder(
+            directorySource = DirectoryMediaSource { directory ->
+                listedDirectories += directory
+                rules = emptyList()
+                DirectoryListing(content = siblings)
+            },
+            serverIdentity = { "server" },
+            visibilityRules = { rules },
+        )
+
+        val original = builder.build("/music/selected.mp3", objectOf("selected.mp3", size = 42))
+        val following = builder.build("/music/selected.mp3", objectOf("selected.mp3", size = 42))
+
+        assertThat(listedDirectories).containsExactly("/music", "/music").inOrder()
+        assertThat(original.items.map(MediaEntry::name))
+            .containsExactly("before.mp3", "selected.mp3", "after.mp3").inOrder()
+        assertThat(original.currentIndex).isEqualTo(1)
+        assertThat(original.current.size).isEqualTo(42)
+        assertThat(following.items.map(MediaEntry::name))
+            .containsExactly("before.mp3", "hidden-one.mp3", "selected.mp3", "hidden-two.mp3", "after.mp3")
+            .inOrder()
+        assertThat(following.currentIndex).isEqualTo(2)
+    }
+
+    @Test
+    fun `provided gallery siblings use visibility exceptions and retain the selected image once`() = runTest {
+        val builder = MediaSequenceBuilder(
+            directorySource = DirectoryMediaSource { error("Provided siblings must not relist") },
+            serverIdentity = { "server" },
+            visibilityRules = {
+                listOf(
+                    hide("*.jpg"),
+                    FileVisibilityRule("cover", "cover.jpg", action = FileVisibilityAction.Show),
+                )
+            },
+        )
+
+        val sequence = builder.build(
+            currentPath = "/photos/selected.jpg",
+            current = objectOf("selected.jpg", size = 42),
+            siblings = listOf(
+                objectOf("hidden.jpg"),
+                objectOf("selected.jpg"),
+                objectOf("cover.jpg"),
+                objectOf("next.png"),
+                objectOf("selected.jpg", size = 999),
+            ),
+        )
+
+        assertThat(sequence.items.map(MediaEntry::name))
+            .containsExactly("selected.jpg", "cover.jpg", "next.png").inOrder()
+        assertThat(sequence.currentIndex).isEqualTo(0)
+        assertThat(sequence.current.size).isEqualTo(42)
+        assertThat(sequence.kind).isEqualTo(MediaKind.IMAGE)
+    }
+
+    @Test
+    fun `selecting media under a hidden directory does not expose its other children`() = runTest {
+        val builder = MediaSequenceBuilder(
+            directorySource = DirectoryMediaSource {
+                DirectoryListing(content = listOf(objectOf("before.mp4"), objectOf("after.mp4")))
+            },
+            serverIdentity = { "server" },
+            visibilityRules = { listOf(hide("private", target = FileVisibilityTarget.Directories)) },
+        )
+
+        val sequence = builder.build("/private/videos/selected.mp4", objectOf("selected.mp4"))
+
+        assertThat(sequence.items.map(MediaEntry::remotePath)).containsExactly("/private/videos/selected.mp4")
+        assertThat(sequence.currentIndex).isEqualTo(0)
+        assertThat(sequence.isDirectoryFallback).isFalse()
     }
 
     @Test
@@ -256,4 +344,9 @@ class MediaSequenceBuilderTest {
         modified = modified,
         isDirectory = isDirectory,
     )
+
+    private fun hide(
+        pattern: String,
+        target: FileVisibilityTarget = FileVisibilityTarget.All,
+    ) = FileVisibilityRule(id = "$target:$pattern", pattern = pattern, target = target)
 }

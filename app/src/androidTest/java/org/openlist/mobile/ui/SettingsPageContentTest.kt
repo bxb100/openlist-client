@@ -18,6 +18,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -25,6 +26,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.openlist.mobile.core.model.CachePolicy
+import kotlinx.coroutines.CompletableDeferred
+import org.openlist.mobile.ui.theme.OpenListTheme
 
 @RunWith(AndroidJUnit4::class)
 class SettingsPageContentTest {
@@ -90,7 +93,7 @@ class SettingsPageContentTest {
         var currentPolicy by mutableStateOf(initialPolicy)
         var savedPolicy: CachePolicy? = null
         composeRule.setContent {
-            MaterialTheme {
+            OpenListTheme {
                 SettingsPageContent(
                     serverBaseUrl = "https://openlist.example.com",
                     username = "admin",
@@ -163,7 +166,7 @@ class SettingsPageContentTest {
         var currentPolicy by mutableStateOf(initialPolicy)
         var savedPolicy: CachePolicy? = null
         composeRule.setContent {
-            MaterialTheme {
+            OpenListTheme {
                 SettingsPageContent(
                     serverBaseUrl = "https://openlist.example.com",
                     username = "admin",
@@ -317,11 +320,11 @@ class SettingsPageContentTest {
         onAccountsRequested: () -> Unit = {},
         onAppearanceChanged: suspend (Boolean, Boolean?) -> Unit = { _, _ -> },
         onCachePolicySave: suspend (CachePolicy) -> Unit = {},
-        onClearCacheRequested: () -> Unit = {},
+        onClearCacheRequested: suspend () -> Unit = {},
         onLogoutRequested: suspend () -> Unit = {},
     ) {
         composeRule.setContent {
-            MaterialTheme {
+            OpenListTheme {
                 SettingsPageContent(
                     serverBaseUrl = "https://openlist.example.com",
                     username = "admin",
@@ -341,7 +344,40 @@ class SettingsPageContentTest {
     }
 
     private fun scrollTo(tag: String) {
+        if (tag in setOf(
+                SettingsUiTags.CACHE_SIZE, SettingsUiTags.CACHE_AGE, SettingsUiTags.CACHE_ENTRIES,
+                SettingsUiTags.CACHE_SAVE, SettingsUiTags.CACHE_REVERT, SettingsUiTags.CACHE_STATUS,
+            )
+        ) {
+            composeRule.onNode(hasScrollToIndexAction())
+                .performScrollToNode(hasTestTag(SettingsUiTags.CACHE_ADVANCED))
+            val section = composeRule.onNodeWithTag(SettingsUiTags.CACHE_ADVANCED)
+            if (section.fetchSemanticsNode().config[SemanticsProperties.StateDescription] != "已展开") {
+                section.performClick()
+            }
+        }
         composeRule.onNode(hasScrollToIndexAction()).performScrollToNode(hasTestTag(tag))
+    }
+
+    @Test
+    fun cacheClearWaitsForCompletionAndPreventsDuplicateRequests() {
+        val finished = CompletableDeferred<Unit>()
+        var requests = 0
+        setSettingsContent(onClearCacheRequested = {
+            requests++
+            finished.await()
+        })
+        scrollTo(SettingsUiTags.CACHE_CLEAR)
+        composeRule.onNodeWithTag(SettingsUiTags.CACHE_CLEAR).performClick()
+        composeRule.onNodeWithTag(SettingsUiTags.CACHE_CLEAR_CONFIRM).performClick()
+        composeRule.onNodeWithTag(SettingsUiTags.CACHE_CLEAR).assertIsNotEnabled()
+        composeRule.onNodeWithText("已清理可释放的缓存").assertDoesNotExist()
+        composeRule.runOnIdle {
+            assertEquals(1, requests)
+            finished.complete(Unit)
+        }
+        composeRule.onNodeWithTag(SettingsUiTags.CACHE_CLEAR).assertIsEnabled()
+        composeRule.onNodeWithText("已清理可释放的缓存").assertIsDisplayed()
     }
 
     private companion object {

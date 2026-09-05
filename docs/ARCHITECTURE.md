@@ -4,7 +4,8 @@
 
 ```text
 Compose Material 3 UI
-  ├─ file/search/settings/account/gallery routes
+  ├─ file/search/transfers/settings/account/gallery routes
+  ├─ shared design system + lifecycle-owned browser/search/gallery state
   ├─ MediaController ──> PlaybackService / MediaSession / enhanced Media3
   └─ WorkManager ──────> resumable upload + local download coordinators
 
@@ -21,6 +22,13 @@ Transports
 ```
 
 The project intentionally stays in one Android module while features are small. Packages are the ownership boundary; a multi-module split is only justified when build isolation or independently reusable code appears.
+
+The UI language and component contracts are documented in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
+The signed-in shell owns file/transfer/settings navigation and reserves space for persistent
+activity summaries. Browser state is retained across Activity recreation but cleared on account
+invalidation, including while another destination is visible. Transfer presentation aggregates
+session-tagged upload and download WorkInfo; its controls still delegate execution and cancellation
+to the grant-aware worker APIs.
 
 ## API contract
 

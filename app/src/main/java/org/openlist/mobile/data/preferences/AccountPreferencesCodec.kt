@@ -72,6 +72,7 @@ internal object AccountPreferencesCodec {
             preferences[Keys.allowInsecureHttp(record.id)] = record.server.allowInsecureHttp
             preferences[Keys.token(record.id)] = record.token
             preferences[Keys.encryptedPasswordHash(record.id)] = record.encryptedPasswordHash
+            preferences[Keys.encryptedPassword(record.id)] = record.encryptedPassword
             preferences[Keys.sessionBindingKey(record.id)] = record.sessionBindingKey
         }
 
@@ -99,6 +100,7 @@ internal object AccountPreferencesCodec {
             server = server,
             token = preferences[Keys.token(id)].orEmpty(),
             encryptedPasswordHash = preferences[Keys.encryptedPasswordHash(id)].orEmpty(),
+            encryptedPassword = preferences[Keys.encryptedPassword(id)].orEmpty(),
             // Existing work used the login token as its binding before token renewal existed.
             sessionBindingKey = preferences[Keys.sessionBindingKey(id)]
                 ?: preferences[Keys.token(id)].orEmpty(),
@@ -112,6 +114,7 @@ internal object AccountPreferencesCodec {
         preferences.remove(Keys.allowInsecureHttp(id))
         preferences.remove(Keys.token(id))
         preferences.remove(Keys.encryptedPasswordHash(id))
+        preferences.remove(Keys.encryptedPassword(id))
         preferences.remove(Keys.sessionBindingKey(id))
     }
 
@@ -142,6 +145,8 @@ internal object AccountPreferencesCodec {
         fun token(id: AccountId) = stringPreferencesKey("account.${id.value}.token")
         fun encryptedPasswordHash(id: AccountId) =
             stringPreferencesKey("account.${id.value}.encrypted_password_hash")
+        fun encryptedPassword(id: AccountId) =
+            stringPreferencesKey("account.${id.value}.encrypted_password")
         fun sessionBindingKey(id: AccountId) = stringPreferencesKey("account.${id.value}.session_binding_key")
     }
 }

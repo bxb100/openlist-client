@@ -238,13 +238,14 @@ class AppContainer(private val application: Application) {
         profile: ServerProfile,
         password: String,
         otpCode: String = "",
+        savePassword: Boolean = false,
     ): OpenListUser = sessionOperation("登录", authentication = true) {
         mutableAuthenticationError.value = null
         appLogger.info("Account", "开始登录")
         try {
             val normalizedProfile = profile.copy(baseUrl = profile.normalizedBaseUrl())
             stopPlaybackForSessionChange()
-            repository.login(normalizedProfile, password, otpCode).also {
+            repository.login(normalizedProfile, password, otpCode, savePassword).also {
                 appLogger.info("Account", "登录成功")
             }
         } catch (challenge: SecondFactorRequiredException) {
@@ -262,6 +263,12 @@ class AppContainer(private val application: Application) {
     fun clearAuthenticationError() {
         mutableAuthenticationError.value = null
     }
+
+    internal suspend fun savedLoginCredential(profile: ServerProfile) =
+        repository.savedLoginCredential(profile)
+
+    internal suspend fun clearSavedLoginCredential(profile: ServerProfile) =
+        repository.clearSavedLoginCredential(profile)
 
     /** Retries a failed first DataStore read; repeated taps share the same in-flight attempt. */
     fun retrySessionLoad() {

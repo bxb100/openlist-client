@@ -14,6 +14,7 @@ import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
@@ -33,15 +34,17 @@ class GalleryViewerContentTest {
     val compose = createComposeRule()
 
     @Test
-    fun tappingMainImageTogglesImageList() {
+    fun tappingMainImageTogglesViewerControls() {
         setGalleryContent(GalleryState(imageEntries()))
 
-        compose.onAllNodesWithTag(OpenListUiTags.GALLERY_IMAGE_LIST).assertCountEquals(0)
+        compose.onNodeWithContentDescription("关闭图片浏览").assertIsDisplayed()
         compose.onNodeWithTag(TEST_GALLERY_IMAGE).performClick()
-        compose.onNodeWithTag(OpenListUiTags.GALLERY_IMAGE_LIST).assertIsDisplayed()
+        compose.onNodeWithContentDescription("关闭图片浏览").assertDoesNotExist()
 
         compose.onNodeWithTag(TEST_GALLERY_IMAGE).performClick()
-        compose.onAllNodesWithTag(OpenListUiTags.GALLERY_IMAGE_LIST).assertCountEquals(0)
+        compose.onNodeWithContentDescription("关闭图片浏览").assertIsDisplayed()
+        compose.onNodeWithContentDescription("同目录图片").performClick()
+        compose.onNodeWithTag(OpenListUiTags.GALLERY_IMAGE_LIST).assertIsDisplayed()
     }
 
     @Test
@@ -49,7 +52,7 @@ class GalleryViewerContentTest {
         val state = GalleryState(imageEntries())
         setGalleryContent(state)
 
-        compose.onNodeWithTag(TEST_GALLERY_IMAGE).performClick()
+        compose.onNodeWithContentDescription("同目录图片").performClick()
         compose.onNodeWithTag(OpenListUiTags.galleryImageItem(0)).assertIsSelected()
 
         compose.onNodeWithTag(OpenListUiTags.GALLERY_IMAGE_LIST).performScrollToIndex(FAR_INDEX)

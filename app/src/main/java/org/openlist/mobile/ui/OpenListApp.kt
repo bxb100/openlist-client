@@ -3,6 +3,7 @@ package org.openlist.mobile.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -13,6 +14,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -23,11 +26,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -54,6 +62,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -63,6 +72,12 @@ import org.openlist.mobile.AppContainer
 import org.openlist.mobile.SessionLoadState
 import org.openlist.mobile.core.model.OpenListObject
 import org.openlist.mobile.media.gallery.GalleryImageRepository
+import org.openlist.mobile.data.cache.CacheStats
+import org.openlist.mobile.ui.designsystem.OpenListLayout
+import org.openlist.mobile.ui.transfers.TransferCenterState
+import org.openlist.mobile.ui.transfers.TransfersRoute
+import org.openlist.mobile.ui.transfers.rememberTransferCenterState
+import org.openlist.mobile.ui.viewer.NowPlayingBar
 
 /**
  * The root UI exposes platform actions as callbacks. It can browse and describe files without
@@ -77,10 +92,17 @@ fun OpenListApp(
         siblings: List<OpenListObject>,
     ) -> Unit = { _, _, _ -> },
     hasPlaybackQueue: Boolean = false,
+    playbackTitle: String? = null,
+    playbackIsPlaying: Boolean = false,
+    playbackIsVideo: Boolean = false,
+    playbackStatusLabel: String? = null,
+    playbackActionLabel: String? = null,
+    onPlaybackToggle: () -> Unit = {},
     onPlaybackQueueRequested: () -> Unit = {},
     onUploadRequested: (directory: String) -> Unit = {},
     onDownloadRequested: (path: String, item: OpenListObject) -> Unit = { _, _ -> },
-    onClearCacheRequested: () -> Unit = {},
+    onClearCacheRequested: suspend () -> Unit = {},
+    onCacheUsageRequested: suspend () -> CacheStats? = { null },
     onFileActionsRequested: (path: String, item: OpenListObject) -> Unit = { _, _ -> },
     // The disk cache reconciles on an IO dispatcher. Resolve this dependency only when a gallery
     // is actually opened so login/session restoration never waits for cache directory scanning.
@@ -135,10 +157,17 @@ fun OpenListApp(
                         container = container,
                         onOpenMedia = onOpenMedia,
                         hasPlaybackQueue = hasPlaybackQueue,
+                        playbackTitle = playbackTitle,
+                        playbackIsPlaying = playbackIsPlaying,
+                        playbackIsVideo = playbackIsVideo,
+                        playbackStatusLabel = playbackStatusLabel,
+                        playbackActionLabel = playbackActionLabel,
+                        onPlaybackToggle = onPlaybackToggle,
                         onPlaybackQueueRequested = onPlaybackQueueRequested,
                         onUploadRequested = onUploadRequested,
                         onDownloadRequested = onDownloadRequested,
                         onClearCacheRequested = onClearCacheRequested,
+                        onCacheUsageRequested = onCacheUsageRequested,
                         onFileActionsRequested = onFileActionsRequested,
                         galleryImageRepository = galleryImageRepository,
                     )
@@ -209,6 +238,7 @@ private enum class AppDestination(
     val unselectedIcon: ImageVector,
 ) {
     Files("文件", Icons.Filled.Folder, Icons.Outlined.Folder),
+    Transfers("传输", Icons.Filled.SwapVert, Icons.Filled.SwapVert),
     Settings("设置", Icons.Filled.Settings, Icons.Outlined.Settings),
 }
 
@@ -219,16 +249,35 @@ private fun SignedInShell(
     container: AppContainer,
     onOpenMedia: (String, OpenListObject, List<OpenListObject>) -> Unit,
     hasPlaybackQueue: Boolean,
+    playbackTitle: String?,
+    playbackIsPlaying: Boolean,
+    playbackIsVideo: Boolean,
+    playbackStatusLabel: String?,
+    playbackActionLabel: String?,
+    onPlaybackToggle: () -> Unit,
     onPlaybackQueueRequested: () -> Unit,
     onUploadRequested: (String) -> Unit,
     onDownloadRequested: (String, OpenListObject) -> Unit,
-    onClearCacheRequested: () -> Unit,
+    onClearCacheRequested: suspend () -> Unit,
+    onCacheUsageRequested: suspend () -> CacheStats?,
     onFileActionsRequested: (String, OpenListObject) -> Unit,
     galleryImageRepository: GalleryImageRepository?,
 ) {
     val sessionBusy by container.sessionBusy.collectAsStateWithLifecycle()
+    val settings by container.sessionStore.settings.collectAsStateWithLifecycle()
+    val transfers = rememberTransferCenterState(settings)
     var destination by rememberSaveable { mutableStateOf(AppDestination.Files) }
     var settingsPage by rememberSaveable { mutableStateOf(SettingsPage.Root) }
+    var accountsReturnDestination by rememberSaveable { mutableStateOf(AppDestination.Settings) }
+    fun closeAccounts() {
+        settingsPage = SettingsPage.Root
+        destination = accountsReturnDestination
+    }
+    fun openAccounts() {
+        accountsReturnDestination = destination
+        settingsPage = SettingsPage.Accounts
+        destination = AppDestination.Settings
+    }
     val backAction = signedInBackAction(
         isFilesDestination = destination == AppDestination.Files,
         isSettingsRoot = settingsPage == SettingsPage.Root,
@@ -236,7 +285,7 @@ private fun SignedInShell(
     BackHandler(backAction != SignedInBackAction.None) {
         when (backAction) {
             SignedInBackAction.None -> Unit
-            SignedInBackAction.SettingsRoot -> settingsPage = SettingsPage.Root
+            SignedInBackAction.SettingsRoot -> closeAccounts()
             SignedInBackAction.Files -> destination = AppDestination.Files
         }
     }
@@ -247,7 +296,7 @@ private fun SignedInShell(
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val useNavigationRail = maxWidth >= 840.dp
+        val useNavigationRail = maxWidth >= 600.dp
         ResponsiveDestinationHost(
             useNavigationRail = useNavigationRail,
             navigationRail = {
@@ -274,10 +323,7 @@ private fun SignedInShell(
                             selected = destination == item,
                             onClick = { selectDestination(item) },
                             icon = {
-                                Icon(
-                                    if (destination == item) item.selectedIcon else item.unselectedIcon,
-                                    contentDescription = null,
-                                )
+                                DestinationIcon(item, destination, transfers.activeCount)
                             },
                             label = { Text(item.label) },
                         )
@@ -293,10 +339,7 @@ private fun SignedInShell(
                                 selected = destination == item,
                                 onClick = { selectDestination(item) },
                                 icon = {
-                                    Icon(
-                                        if (destination == item) item.selectedIcon else item.unselectedIcon,
-                                        contentDescription = null,
-                                    )
+                                    DestinationIcon(item, destination, transfers.activeCount)
                                 },
                                 label = { Text(item.label) },
                             )
@@ -304,18 +347,41 @@ private fun SignedInShell(
                     }
                 }
             },
+            persistentBar = {
+                if (settingsPage == SettingsPage.Root) {
+                    if (transfers.activeCount > 0 && destination != AppDestination.Transfers) {
+                        TransferActivitySummary(
+                            count = transfers.activeCount,
+                            onClick = { selectDestination(AppDestination.Transfers) },
+                        )
+                    }
+                    if (hasPlaybackQueue) {
+                        NowPlayingBar(
+                            title = playbackTitle?.takeIf(String::isNotBlank) ?: "播放队列",
+                            isPlaying = playbackIsPlaying,
+                            isVideo = playbackIsVideo,
+                            onOpen = onPlaybackQueueRequested,
+                            onToggle = onPlaybackToggle,
+                            statusLabel = playbackStatusLabel ?: if (playbackIsPlaying) "正在播放" else "已暂停",
+                            playActionLabel = playbackActionLabel ?: "继续播放",
+                        )
+                    }
+                }
+            },
         ) {
             DestinationContent(
                 destination = destination,
                 settingsPage = settingsPage,
-                onSettingsPageChange = { settingsPage = it },
+                onAccountsRequested = ::openAccounts,
+                onAccountsBack = ::closeAccounts,
+                transfers = transfers,
+                onBrowseFiles = { selectDestination(AppDestination.Files) },
                 container = container,
                 onOpenMedia = onOpenMedia,
-                hasPlaybackQueue = hasPlaybackQueue,
-                onPlaybackQueueRequested = onPlaybackQueueRequested,
                 onUploadRequested = onUploadRequested,
                 onDownloadRequested = onDownloadRequested,
                 onClearCacheRequested = onClearCacheRequested,
+                onCacheUsageRequested = onCacheUsageRequested,
                 onFileActionsRequested = onFileActionsRequested,
                 galleryImageRepository = galleryImageRepository,
             )
@@ -362,6 +428,7 @@ internal fun ResponsiveDestinationHost(
     modifier: Modifier = Modifier,
     navigationRail: @Composable () -> Unit,
     bottomBar: @Composable () -> Unit,
+    persistentBar: @Composable () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     Row(modifier.fillMaxSize()) {
@@ -369,7 +436,15 @@ internal fun ResponsiveDestinationHost(
         Scaffold(
             modifier = Modifier.weight(1f).fillMaxSize(),
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
-            bottomBar = { if (!useNavigationRail) bottomBar() },
+            bottomBar = {
+                Column(
+                    if (useNavigationRail) Modifier.windowInsetsPadding(WindowInsets.navigationBars)
+                    else Modifier,
+                ) {
+                    persistentBar()
+                    if (!useNavigationRail) bottomBar()
+                }
+            },
         ) { contentPadding ->
             Box(Modifier.fillMaxSize().padding(contentPadding)) {
                 content()
@@ -393,14 +468,16 @@ internal fun signedInBackAction(
 private fun DestinationContent(
     destination: AppDestination,
     settingsPage: SettingsPage,
-    onSettingsPageChange: (SettingsPage) -> Unit,
+    onAccountsRequested: () -> Unit,
+    onAccountsBack: () -> Unit,
+    transfers: TransferCenterState,
+    onBrowseFiles: () -> Unit,
     container: AppContainer,
     onOpenMedia: (String, OpenListObject, List<OpenListObject>) -> Unit,
-    hasPlaybackQueue: Boolean,
-    onPlaybackQueueRequested: () -> Unit,
     onUploadRequested: (String) -> Unit,
     onDownloadRequested: (String, OpenListObject) -> Unit,
-    onClearCacheRequested: () -> Unit,
+    onClearCacheRequested: suspend () -> Unit,
+    onCacheUsageRequested: suspend () -> CacheStats?,
     onFileActionsRequested: (String, OpenListObject) -> Unit,
     galleryImageRepository: GalleryImageRepository?,
 ) {
@@ -415,12 +492,16 @@ private fun DestinationContent(
             AppDestination.Files -> BrowserScreen(
                 container = container,
                 onOpenMedia = onOpenMedia,
-                hasPlaybackQueue = hasPlaybackQueue,
-                onPlaybackQueueRequested = onPlaybackQueueRequested,
                 onUploadRequested = onUploadRequested,
                 onDownloadRequested = onDownloadRequested,
                 onFileActionsRequested = onFileActionsRequested,
                 galleryImageRepository = galleryImageRepository,
+                onAccountsRequested = onAccountsRequested,
+            )
+
+            AppDestination.Transfers -> TransfersRoute(
+                state = transfers,
+                onBrowseFiles = onBrowseFiles,
             )
 
             AppDestination.Settings -> SaveableContent(
@@ -431,15 +512,58 @@ private fun DestinationContent(
                     SettingsPage.Root -> SettingsScreen(
                         sessionStore = container.sessionStore,
                         operationBusy = sessionBusy,
-                        onAccountsRequested = { onSettingsPageChange(SettingsPage.Accounts) },
+                        onAccountsRequested = onAccountsRequested,
                         onClearCacheRequested = onClearCacheRequested,
+                        onCacheUsageRequested = onCacheUsageRequested,
                         onLogoutRequested = { container.logout() },
                     )
                     SettingsPage.Accounts -> AccountScreen(
                         container = container,
-                        onBack = { onSettingsPageChange(SettingsPage.Root) },
+                        onBack = onAccountsBack,
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DestinationIcon(
+    item: AppDestination,
+    selected: AppDestination,
+    activeTransferCount: Int,
+) {
+    BadgedBox(
+        badge = {
+            if (item == AppDestination.Transfers && activeTransferCount > 0) {
+                Badge { Text(activeTransferCount.toString()) }
+            }
+        },
+    ) {
+        Icon(
+            if (item == selected) item.selectedIcon else item.unselectedIcon,
+            contentDescription = null,
+        )
+    }
+}
+
+@Composable
+private fun TransferActivitySummary(count: Int, onClick: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Column {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clickable(role = Role.Button, onClickLabel = "查看传输", onClick = onClick)
+                    .padding(horizontal = OpenListLayout.pagePadding, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.SwapVert, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text("$count 项传输进行中", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+                Icon(Icons.Default.ChevronRight, contentDescription = null)
             }
         }
     }

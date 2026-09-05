@@ -13,6 +13,9 @@ import android.os.Looper
 import android.provider.MediaStore
 import android.util.Rational
 import android.view.PixelCopy
+import android.view.SurfaceView
+import android.view.View
+import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -23,40 +26,72 @@ import androidx.compose.runtime.setValue
 import androidx.core.app.PictureInPictureModeChangedInfo
 import androidx.core.util.Consumer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
-import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /**
- * Captures the current on-screen playback frame (including the Media3 [android.view.SurfaceView],
- * which ordinary view drawing cannot read) with [PixelCopy] and saves it as a PNG. The caller is
- * expected to hide the overlay chrome before invoking this so the saved frame is uncluttered.
+ * Captures the current Media3 [SurfaceView] frame with [PixelCopy] and saves it as a PNG.
+ * Copying the video surface itself excludes controls and preserves the frame's aspect ratio.
  *
  * Returns a human-readable destination description on success.
  */
 suspend fun captureAndSavePlaybackFrame(activity: Activity): Result<String> {
     val window = activity.window ?: return Result.failure(IllegalStateException("无法获取窗口"))
-    val decor = window.decorView
-    val width = decor.width
-    val height = decor.height
-    if (width <= 0 || height <= 0) {
-        return Result.failure(IllegalStateException("画面尚未就绪"))
+    val surfaceView = window.decorView.findPlaybackSurfaceView()
+        ?: return Result.failure(IllegalStateException("视频画面尚未就绪"))
+    return try {
+        val bitmap = copyPlaybackFrame(surfaceView)
+        try {
+            withContext(Dispatchers.IO) { saveBitmapToPictures(activity, bitmap) }
+        } finally {
+            bitmap.recycle()
+        }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        Result.failure(error)
     }
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-    val copyResult = suspendCancellableCoroutine { continuation ->
-        PixelCopy.request(
-            window,
-            bitmap,
-            { result -> continuation.resume(result) },
-            Handler(Looper.getMainLooper()),
-        )
-    }
-    if (copyResult != PixelCopy.SUCCESS) {
-        return Result.failure(IllegalStateException("截图失败（$copyResult）"))
-    }
-    return withContext(Dispatchers.IO) { saveBitmapToPictures(activity, bitmap) }
 }
+
+private fun View.findPlaybackSurfaceView(): SurfaceView? {
+    if (!isShown) return null
+    if (this is SurfaceView && width > 0 && height > 0 && holder.surface.isValid) return this
+    if (this is ViewGroup) {
+        for (index in 0 until childCount) {
+            getChildAt(index).findPlaybackSurfaceView()?.let { return it }
+        }
+    }
+    return null
+}
+
+/** The caller owns a successful bitmap; cancellation leaves cleanup with PixelCopy's callback. */
+internal suspend fun copyPlaybackFrame(surfaceView: SurfaceView): Bitmap =
+    suspendCancellableCoroutine { continuation ->
+        val bitmap = Bitmap.createBitmap(surfaceView.width, surfaceView.height, Bitmap.Config.ARGB_8888)
+        // This four-argument SurfaceView overload is available on API 24. The Window and cropped
+        // SurfaceView overloads require API 26; copying a Window also targets a different surface.
+        try {
+            PixelCopy.request(
+                surfaceView,
+                bitmap,
+                { result ->
+                    if (result == PixelCopy.SUCCESS) {
+                        continuation.resume(bitmap) { _, unclaimedBitmap, _ -> unclaimedBitmap.recycle() }
+                    } else {
+                        bitmap.recycle()
+                        continuation.resumeWithException(IllegalStateException("截图失败（$result）"))
+                    }
+                },
+                Handler(Looper.getMainLooper()),
+            )
+        } catch (error: Exception) {
+            bitmap.recycle()
+            continuation.resumeWithException(error)
+        }
+    }
 
 private fun saveBitmapToPictures(context: Context, bitmap: Bitmap): Result<String> = runCatching {
     val name = "OpenList_${System.currentTimeMillis()}.png"

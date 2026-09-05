@@ -1,6 +1,7 @@
 package org.openlist.mobile.data.preferences
 
 import android.content.Context
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.openlist.mobile.core.model.CachePolicy
+import org.openlist.mobile.core.model.FileVisibilityRule
 import org.openlist.mobile.core.model.ServerProfile
 import org.openlist.mobile.data.account.AccountDraft
 import org.openlist.mobile.data.account.AccountId
@@ -29,6 +31,7 @@ import org.openlist.mobile.data.account.AccountState
 import org.openlist.mobile.data.account.AccountStateMachine
 import org.openlist.mobile.data.account.AccountSummary
 import org.openlist.mobile.data.account.LoginCompletion
+import org.openlist.mobile.data.account.hasSameIdentity
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 
@@ -41,6 +44,7 @@ data class AppSettings(
     val dynamicColor: Boolean = true,
     val darkTheme: Boolean? = null,
     val sessionBindingKey: String = "",
+    val fileVisibilityRules: List<FileVisibilityRule> = emptyList(),
 ) {
     /** Keep the compatibility token readable by network code without making logs disclose it. */
     override fun toString(): String =
@@ -53,12 +57,17 @@ private data class DecodedSession(
     val accountSummaries: List<AccountSummary>,
 )
 
-class SessionStore(
-    context: Context,
+class SessionStore internal constructor(
+    private val dataStore: DataStore<Preferences>,
     private val scope: CoroutineScope,
     private val accountIdGenerator: () -> String = { UUID.randomUUID().toString() },
 ) {
-    private val dataStore = context.openListDataStore
+    constructor(
+        context: Context,
+        scope: CoroutineScope,
+        accountIdGenerator: () -> String = { UUID.randomUUID().toString() },
+    ) : this(context.openListDataStore, scope, accountIdGenerator)
+
     private val current = AtomicReference(AppSettings())
     private val loadedCurrent = AtomicReference<AppSettings?>(null)
     private val currentAccounts = AtomicReference(AccountState())
@@ -115,40 +124,24 @@ class SessionStore(
 
     internal fun authenticationSnapshot(): AccountRecord? = currentAccounts.get().active
 
+    internal fun accountForProfile(profile: ServerProfile): AccountRecord? =
+        currentAccounts.get().records.firstOrNull { it.server.hasSameIdentity(profile) }
+
+    internal suspend fun clearSavedLoginCredentials(accountId: AccountId, expectedProfile: ServerProfile) {
+        mutateAccounts { AccountStateMachine.clearSavedLoginCredentials(it, accountId, expectedProfile) }
+    }
+
     /** Commits renewal only while the original active login is still current. */
     internal suspend fun replaceAuthentication(
         expected: AccountRecord,
         token: String,
         clearCredentials: Boolean = false,
     ): Boolean {
-        require(clearCredentials || token.isNotBlank()) { "Renewed token must not be blank" }
         var replaced = false
         mutateAccounts { state ->
-            val active = state.active
-            if (state.activeId != expected.id || active == null ||
-                active.id != expected.id || active.server != expected.server ||
-                active.token != expected.token ||
-                active.sessionBindingKey != expected.sessionBindingKey ||
-                active.encryptedPasswordHash != expected.encryptedPasswordHash
-            ) {
-                state
-            } else {
-                replaced = true
-                AccountState(
-                    records = state.records.map { record ->
-                        if (record.id == expected.id) {
-                            record.updated(
-                                token = if (clearCredentials) "" else token,
-                                encryptedPasswordHash = if (clearCredentials) "" else record.encryptedPasswordHash,
-                                sessionBindingKey = if (clearCredentials) "" else record.sessionBindingKey,
-                            )
-                        } else {
-                            record
-                        }
-                    },
-                    activeId = state.activeId,
-                )
-            }
+            AccountStateMachine.replaceAuthentication(state, expected, token, clearCredentials).also {
+                replaced = it.replaced
+            }.state
         }
         return replaced
     }
@@ -159,12 +152,14 @@ class SessionStore(
             AccountStateMachine.matchesIdentity(state, id, expectedProfile)
     }
 
-    /** Waits for DataStore's first persisted value instead of observing the StateFlow placeholder. */
+    /** Waits for initialization, then returns the latest published active-account settings. */
     suspend fun awaitLoaded(): AppSettings {
         val attempt = synchronized(loadLock) {
             if (loadStatus == LoadStatus.IDLE) startObservationLocked() else loadAttempt
         }
-        return attempt.await()
+        // The first load may predate login, token renewal, or an account switch.
+        attempt.await()
+        return current.get()
     }
 
     /**
@@ -179,7 +174,8 @@ class SessionStore(
                 LoadStatus.IDLE, LoadStatus.FAILED -> startObservationLocked()
             }
         }
-        return attempt?.await() ?: current.get()
+        attempt?.await()
+        return current.get()
     }
 
     suspend fun addAccount(
@@ -207,13 +203,19 @@ class SessionStore(
 
     /**
      * Atomically activates an existing server/username identity or creates a new account, while
-     * clearing only that target account's stale token before authentication starts.
+     * clearing that target's stale session and, when requested, saved password before login.
      */
-    suspend fun beginLogin(profile: ServerProfile, displayName: String? = null): AccountId {
+    suspend fun beginLogin(
+        profile: ServerProfile,
+        displayName: String? = null,
+        clearSavedPassword: Boolean = false,
+    ): AccountId {
         val idForNewAccount = nextAccountId()
         var selectedId: AccountId? = null
         mutateAccounts { state ->
-            AccountStateMachine.beginLogin(state, idForNewAccount, profile, displayName).also {
+            AccountStateMachine.beginLogin(
+                state, idForNewAccount, profile, displayName, clearSavedPassword,
+            ).also {
                 selectedId = it.accountId
             }.state
         }
@@ -229,6 +231,7 @@ class SessionStore(
         expectedProfile: ServerProfile,
         token: String,
         encryptedPasswordHash: String = "",
+        encryptedPassword: String = "",
     ): LoginCompletion {
         var completion: LoginCompletion? = null
         mutateAccounts { state ->
@@ -238,6 +241,7 @@ class SessionStore(
                 expectedProfile = expectedProfile,
                 token = token,
                 encryptedPasswordHash = encryptedPasswordHash,
+                encryptedPassword = encryptedPassword,
             ).also { completion = it.completion }.state
         }
         return requireNotNull(completion)
@@ -279,6 +283,12 @@ class SessionStore(
                 null -> "system"
             }
         }
+        publish(decodeSession(updated))
+    }
+
+    suspend fun updateFileVisibilityRules(rules: List<FileVisibilityRule>) {
+        val encoded = FileVisibilityPreferencesCodec.encode(rules)
+        val updated = dataStore.edit { it[Keys.FILE_VISIBILITY_RULES] = encoded }
         publish(decodeSession(updated))
     }
 
@@ -365,6 +375,7 @@ class SessionStore(
                     "dark" -> true
                     else -> null
                 },
+                fileVisibilityRules = FileVisibilityPreferencesCodec.decode(preferences[Keys.FILE_VISIBILITY_RULES]),
             ),
             accountSummaries = accounts.summaries(),
         )
@@ -376,6 +387,7 @@ class SessionStore(
         val CACHE_ENTRIES = intPreferencesKey("cache_max_entries")
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val DARK_THEME = stringPreferencesKey("dark_theme")
+        val FILE_VISIBILITY_RULES = stringPreferencesKey("file_visibility_rules")
     }
 
     private enum class LoadStatus {

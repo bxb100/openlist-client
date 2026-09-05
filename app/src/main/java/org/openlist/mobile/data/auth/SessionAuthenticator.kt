@@ -33,7 +33,7 @@ internal class SessionAuthenticator(
         // Requests that failed together reuse the token committed by the first renewal.
         if (account.token != session.token) return@withLock account.httpSnapshot()
         if (account.encryptedPasswordHash.isBlank()) {
-            requireLogin(account, "登录已过期，请重新登录一次以启用自动续期")
+            requireLogin(account, "登录已过期，请重新登录；勾选保存密码可自动续期")
         }
         val passwordHash = try {
             withContext(Dispatchers.IO) {

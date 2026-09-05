@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -38,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
@@ -96,6 +98,7 @@ internal fun PlaybackInfoButton(
         onClick = onClick,
         modifier = modifier
             .testTag(PlaybackUiTags.PLAYBACK_INFO_BUTTON)
+            .size(48.dp)
             .then(
                 if (onVideoSurface) {
                     Modifier.background(Color.Black.copy(alpha = 0.62f), CircleShape)
@@ -210,13 +213,13 @@ private fun PlaybackInfoHeader(
                 text = sanitizePlaybackInfoTitle(title),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }
         IconButton(
             onClick = onDismiss,
-            modifier = Modifier.testTag(PlaybackUiTags.PLAYBACK_INFO_CLOSE),
+            modifier = Modifier.size(48.dp).testTag(PlaybackUiTags.PLAYBACK_INFO_CLOSE),
         ) {
             Icon(Icons.Default.Close, contentDescription = "关闭播放信息")
         }
@@ -239,7 +242,7 @@ private fun PlaybackInfoBody(
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
     ) {
-        if (maxWidth >= 600.dp) {
+        if (maxWidth >= 600.dp && LocalDensity.current.fontScale < 1.5f) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),

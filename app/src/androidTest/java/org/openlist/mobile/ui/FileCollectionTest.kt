@@ -34,6 +34,7 @@ class FileCollectionTest {
             item = OpenListObject(name = "song.mp3", size = 2_048, type = 3),
         )
         var openedPath: String? = null
+        var actionsPath: String? = null
 
         compose.setContent {
             MaterialTheme {
@@ -42,8 +43,7 @@ class FileCollectionTest {
                     layout = CollectionLayout.List,
                     contentPadding = PaddingValues(0.dp),
                     onOpen = { openedPath = it.path },
-                    onDetails = {},
-                    onFileActions = {},
+                    onFileActions = { actionsPath = it.path },
                 )
             }
         }
@@ -53,6 +53,8 @@ class FileCollectionTest {
         compose.onNodeWithContentDescription("song.mp3 的更多操作")
             .assertIsDisplayed()
             .assertHasClickAction()
+            .performClick()
+        compose.runOnIdle { assertEquals("/Music/song.mp3", actionsPath) }
     }
 
     @Test
@@ -70,7 +72,6 @@ class FileCollectionTest {
                     layout = CollectionLayout.Grid,
                     contentPadding = PaddingValues(0.dp),
                     onOpen = {},
-                    onDetails = {},
                     onFileActions = {},
                     showParent = true,
                 )
@@ -105,7 +106,6 @@ class FileCollectionTest {
                     layout = layout,
                     contentPadding = PaddingValues(0.dp),
                     onOpen = {},
-                    onDetails = {},
                     onFileActions = {},
                     modifier = Modifier.width(180.dp),
                 )

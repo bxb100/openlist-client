@@ -480,6 +480,13 @@ class UploadWorker(
                 .setConstraints(constraints)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
                 .addTag(WORK_TAG)
+                .apply {
+                    TransferWorkMetadata.tags(
+                        binding = sessionBinding.value,
+                        remotePath = canonicalRemotePath,
+                        createdAtMillis = System.currentTimeMillis(),
+                    ).forEach { addTag(it) }
+                }
                 .build()
         }
 

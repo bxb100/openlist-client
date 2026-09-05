@@ -1,8 +1,12 @@
 package org.openlist.mobile.media
 
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
@@ -223,6 +227,310 @@ class PlaybackControlsTest {
             assertEquals(0, tapCount)
             assertTrue(speedEvents.isEmpty())
             assertEquals(1, committedPositions.size)
+        }
+    }
+
+    @Test
+    fun verticalVideoDragsAdjustBrightnessOnLeftAndVolumeOnRightInBothDirections() {
+        val starts = mutableListOf<VideoAdjustment>()
+        val adjustments = mutableListOf<Pair<VideoAdjustment, Float>>()
+        var endCount = 0
+        compose.setContent {
+            VideoGestureSurface(
+                onTap = {},
+                canSeek = { true },
+                currentPositionMs = { 0L },
+                durationMs = { 90_000L },
+                onSeekBack = {},
+                onSeekForward = {},
+                onHorizontalSeekPreview = {},
+                onHorizontalSeek = {},
+                onSpeedBoostStart = { false },
+                onSpeedBoostEnd = {},
+                onVerticalAdjustmentStart = starts::add,
+                onVerticalAdjustment = { target, delta -> adjustments += target to delta },
+                onVerticalAdjustmentEnd = { endCount += 1 },
+                modifier = Modifier.width(300.dp).height(240.dp),
+            )
+        }
+
+        val gestureLayer = compose.onNodeWithTag(PlaybackUiTags.VIDEO_GESTURE_SURFACE)
+        listOf(VideoAdjustment.BRIGHTNESS, VideoAdjustment.VOLUME).forEach { target ->
+            listOf(true, false).forEach { upwards ->
+                gestureLayer.performTouchInput {
+                    advanceEventTime(viewConfiguration.doubleTapTimeoutMillis + 100L)
+                    val x = width * if (target == VideoAdjustment.BRIGHTNESS) 0.25f else 0.75f
+                    swipe(
+                        start = Offset(x, height * if (upwards) 0.8f else 0.2f),
+                        end = Offset(x, height * if (upwards) 0.2f else 0.8f),
+                        durationMillis = 300L,
+                    )
+                }
+
+                compose.runOnIdle {
+                    assertEquals(listOf(target), starts)
+                    assertTrue(adjustments.isNotEmpty())
+                    assertTrue(adjustments.all { it.first == target })
+                    val finalDelta = adjustments.last().second
+                    assertTrue(if (upwards) finalDelta > 0.2f else finalDelta < -0.2f)
+                    assertTrue(kotlin.math.abs(finalDelta) <= 1f)
+                    assertEquals(1, endCount)
+                    starts.clear()
+                    adjustments.clear()
+                    endCount = 0
+                }
+            }
+        }
+    }
+
+    @Test
+    fun verticalVideoDragDoesNotSeekTapOrStartLongPressSpeedBoost() {
+        var tapCount = 0
+        var seekCount = 0
+        val seekPreviews = mutableListOf<Long?>()
+        val speedEvents = mutableListOf<String>()
+        val adjustments = mutableListOf<Float>()
+        compose.setContent {
+            VideoGestureSurface(
+                onTap = { tapCount += 1 },
+                canSeek = { true },
+                currentPositionMs = { 30_000L },
+                durationMs = { 90_000L },
+                onSeekBack = { seekCount += 1 },
+                onSeekForward = { seekCount += 1 },
+                onHorizontalSeekPreview = seekPreviews::add,
+                onHorizontalSeek = { seekCount += 1 },
+                onSpeedBoostStart = {
+                    speedEvents += "start"
+                    true
+                },
+                onSpeedBoostEnd = { speedEvents += "end" },
+                onVerticalAdjustment = { _, delta -> adjustments += delta },
+                modifier = Modifier.width(300.dp).height(240.dp),
+            )
+        }
+
+        compose.onNodeWithTag(PlaybackUiTags.VIDEO_GESTURE_SURFACE).performTouchInput {
+            swipe(
+                start = Offset(width * 0.25f, height * 0.8f),
+                end = Offset(width * 0.25f, height * 0.2f),
+                durationMillis = viewConfiguration.longPressTimeoutMillis + 200L,
+            )
+        }
+
+        compose.runOnIdle {
+            assertTrue(adjustments.isNotEmpty())
+            assertEquals(0, tapCount)
+            assertEquals(0, seekCount)
+            assertTrue(seekPreviews.filterNotNull().isEmpty())
+            assertTrue(speedEvents.isEmpty())
+        }
+    }
+
+    @Test
+    fun verticalDragKeepsItsInitialSideWhenTheFingerCrossesTheCenter() {
+        val starts = mutableListOf<VideoAdjustment>()
+        val adjustments = mutableListOf<Pair<VideoAdjustment, Float>>()
+        val seeks = mutableListOf<Long>()
+        compose.setContent {
+            VideoGestureSurface(
+                onTap = {},
+                canSeek = { true },
+                currentPositionMs = { 30_000L },
+                durationMs = { 90_000L },
+                onSeekBack = {},
+                onSeekForward = {},
+                onHorizontalSeekPreview = {},
+                onHorizontalSeek = seeks::add,
+                onSpeedBoostStart = { false },
+                onSpeedBoostEnd = {},
+                onVerticalAdjustmentStart = starts::add,
+                onVerticalAdjustment = { target, delta -> adjustments += target to delta },
+                modifier = Modifier.width(300.dp).height(240.dp),
+            )
+        }
+
+        compose.onNodeWithTag(PlaybackUiTags.VIDEO_GESTURE_SURFACE).performTouchInput {
+            down(Offset(width * 0.25f, height * 0.8f))
+            moveTo(Offset(width * 0.25f, height * 0.55f), 100L)
+            moveTo(Offset(width * 0.85f, height * 0.25f), 100L)
+            up()
+        }
+
+        compose.runOnIdle {
+            assertEquals(listOf(VideoAdjustment.BRIGHTNESS), starts)
+            assertTrue(adjustments.isNotEmpty())
+            assertTrue(adjustments.all { it.first == VideoAdjustment.BRIGHTNESS })
+            assertTrue(adjustments.last().second > 0.2f)
+            assertTrue(seeks.isEmpty())
+        }
+    }
+
+    @Test
+    fun disablingVideoGesturesPreventsAdjustmentAndEndsAnActiveAdjustment() {
+        val enabled = mutableStateOf(false)
+        val starts = mutableListOf<VideoAdjustment>()
+        val adjustments = mutableListOf<Float>()
+        var endCount = 0
+        compose.setContent {
+            VideoGestureSurface(
+                onTap = {},
+                canSeek = { true },
+                currentPositionMs = { 0L },
+                durationMs = { 90_000L },
+                onSeekBack = {},
+                onSeekForward = {},
+                onHorizontalSeekPreview = {},
+                onHorizontalSeek = {},
+                onSpeedBoostStart = { false },
+                onSpeedBoostEnd = {},
+                gesturesEnabled = enabled.value,
+                onVerticalAdjustmentStart = starts::add,
+                onVerticalAdjustment = { _, delta -> adjustments += delta },
+                onVerticalAdjustmentEnd = { endCount += 1 },
+                modifier = Modifier.width(300.dp).height(240.dp),
+            )
+        }
+
+        val gestureLayer = compose.onNodeWithTag(PlaybackUiTags.VIDEO_GESTURE_SURFACE)
+        gestureLayer.performTouchInput {
+            swipe(Offset(width * 0.75f, height * 0.8f), Offset(width * 0.75f, height * 0.2f))
+        }
+        compose.runOnIdle {
+            assertTrue(starts.isEmpty())
+            assertTrue(adjustments.isEmpty())
+            assertEquals(0, endCount)
+            enabled.value = true
+        }
+        gestureLayer.performTouchInput {
+            down(Offset(width * 0.75f, height * 0.8f))
+            moveTo(Offset(width * 0.75f, height * 0.4f), 100L)
+        }
+        compose.runOnIdle {
+            assertEquals(listOf(VideoAdjustment.VOLUME), starts)
+            assertTrue(adjustments.isNotEmpty())
+            enabled.value = false
+        }
+        compose.runOnIdle {
+            assertEquals(1, endCount)
+            adjustments.clear()
+        }
+        gestureLayer.performTouchInput {
+            moveTo(Offset(width * 0.75f, height * 0.2f), 100L)
+            up()
+        }
+        compose.runOnIdle {
+            assertTrue(adjustments.isEmpty())
+            assertEquals(1, endCount)
+        }
+    }
+
+    @Test
+    fun nonSeekableVideoStillAllowsVerticalVolumeAdjustment() {
+        val starts = mutableListOf<VideoAdjustment>()
+        val adjustments = mutableListOf<Float>()
+        var endCount = 0
+        compose.setContent {
+            VideoGestureSurface(
+                onTap = {},
+                canSeek = { false },
+                currentPositionMs = { 0L },
+                durationMs = { null },
+                onSeekBack = {},
+                onSeekForward = {},
+                onHorizontalSeekPreview = {},
+                onHorizontalSeek = {},
+                onSpeedBoostStart = { false },
+                onSpeedBoostEnd = {},
+                onVerticalAdjustmentStart = starts::add,
+                onVerticalAdjustment = { _, delta -> adjustments += delta },
+                onVerticalAdjustmentEnd = { endCount += 1 },
+                modifier = Modifier.width(300.dp).height(240.dp),
+            )
+        }
+
+        compose.onNodeWithTag(PlaybackUiTags.VIDEO_GESTURE_SURFACE).performTouchInput {
+            swipe(Offset(width * 0.75f, height * 0.8f), Offset(width * 0.75f, height * 0.2f))
+        }
+
+        compose.runOnIdle {
+            assertEquals(listOf(VideoAdjustment.VOLUME), starts)
+            assertTrue(adjustments.isNotEmpty())
+            assertTrue(adjustments.last() > 0.2f)
+            assertEquals(1, endCount)
+        }
+    }
+
+    @Test
+    fun verticalAdjustmentTakesPriorityOverTheSurroundingPageScroll() {
+        val scrollState = ScrollState(0)
+        val adjustments = mutableListOf<Float>()
+        compose.setContent {
+            Column(Modifier.width(300.dp).height(240.dp).verticalScroll(scrollState)) {
+                VideoGestureSurface(
+                    onTap = {},
+                    canSeek = { true },
+                    currentPositionMs = { 0L },
+                    durationMs = { 90_000L },
+                    onSeekBack = {},
+                    onSeekForward = {},
+                    onHorizontalSeekPreview = {},
+                    onHorizontalSeek = {},
+                    onSpeedBoostStart = { false },
+                    onSpeedBoostEnd = {},
+                    onVerticalAdjustment = { _, delta -> adjustments += delta },
+                    modifier = Modifier.width(300.dp).height(240.dp),
+                )
+                Spacer(Modifier.height(800.dp))
+            }
+        }
+
+        compose.onNodeWithTag(PlaybackUiTags.VIDEO_GESTURE_SURFACE).performTouchInput {
+            swipe(Offset(width * 0.25f, height * 0.8f), Offset(width * 0.25f, height * 0.2f))
+        }
+
+        compose.runOnIdle {
+            assertTrue(scrollState.maxValue > 0)
+            assertTrue(adjustments.isNotEmpty())
+            assertTrue(adjustments.last() > 0.2f)
+            assertEquals(0, scrollState.value)
+        }
+    }
+
+    @Test
+    fun cancelledVerticalVideoDragEndsAdjustmentAndReleasesInteractionExactlyOnce() {
+        val adjustments = mutableListOf<Float>()
+        val interactionStates = mutableListOf<Boolean>()
+        var endCount = 0
+        compose.setContent {
+            VideoGestureSurface(
+                onTap = {},
+                canSeek = { true },
+                currentPositionMs = { 0L },
+                durationMs = { 90_000L },
+                onSeekBack = {},
+                onSeekForward = {},
+                onHorizontalSeekPreview = {},
+                onHorizontalSeek = {},
+                onSpeedBoostStart = { false },
+                onSpeedBoostEnd = {},
+                onVerticalAdjustment = { _, delta -> adjustments += delta },
+                onVerticalAdjustmentEnd = { endCount += 1 },
+                onInteractionActiveChange = interactionStates::add,
+                modifier = Modifier.width(300.dp).height(240.dp),
+            )
+        }
+
+        compose.onNodeWithTag(PlaybackUiTags.VIDEO_GESTURE_SURFACE).performTouchInput {
+            down(Offset(width * 0.25f, height * 0.8f))
+            moveTo(Offset(width * 0.25f, height * 0.4f), 100L)
+            cancel()
+        }
+
+        compose.runOnIdle {
+            assertTrue(adjustments.isNotEmpty())
+            assertEquals(1, endCount)
+            assertEquals(listOf(true, false), interactionStates)
         }
     }
 

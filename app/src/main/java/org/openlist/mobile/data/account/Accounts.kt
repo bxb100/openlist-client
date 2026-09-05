@@ -49,6 +49,7 @@ internal class AccountRecord(
     val token: String,
     val encryptedPasswordHash: String = "",
     val sessionBindingKey: String = "",
+    val encryptedPassword: String = "",
 ) {
     fun updated(
         displayName: String = this.displayName,
@@ -56,8 +57,9 @@ internal class AccountRecord(
         token: String = this.token,
         encryptedPasswordHash: String = this.encryptedPasswordHash,
         sessionBindingKey: String = this.sessionBindingKey,
+        encryptedPassword: String = this.encryptedPassword,
     ): AccountRecord = AccountRecord(
-        id, displayName, server, token, encryptedPasswordHash, sessionBindingKey,
+        id, displayName, server, token, encryptedPasswordHash, sessionBindingKey, encryptedPassword,
     )
 
     fun summary(isActive: Boolean): AccountSummary = AccountSummary(
@@ -71,7 +73,7 @@ internal class AccountRecord(
 
     override fun toString(): String =
         "AccountRecord(id=$id, displayName=$displayName, server=$server, token=<redacted>, " +
-            "encryptedPasswordHash=<redacted>, sessionBindingKey=<redacted>)"
+            "encryptedPasswordHash=<redacted>, encryptedPassword=<redacted>, sessionBindingKey=<redacted>)"
 }
 
 internal class AccountState(
@@ -109,6 +111,11 @@ internal data class LoginCompletionMutation(
 internal data class LoginFailureMutation(
     val state: AccountState,
     val cleared: Boolean,
+)
+
+internal data class AuthenticationReplacement(
+    val state: AccountState,
+    val replaced: Boolean,
 )
 
 /** Pure state transitions shared by DataStore and JVM migration/switching tests. */
@@ -150,12 +157,13 @@ internal object AccountStateMachine {
         return AccountMutation(AccountState(records, activeId), id)
     }
 
-    /** Selects an existing identity or creates it, and clears only that target's stale token. */
+    /** Binds a login target and applies an explicit password opt-out before any network request. */
     fun beginLogin(
         state: AccountState,
         idForNewAccount: AccountId,
         profile: ServerProfile,
         displayName: String? = null,
+        clearSavedPassword: Boolean = false,
     ): AccountMutation {
         val server = normalizeNewProfile(profile)
         val existing = state.records.firstOrNull { it.server.hasSameIdentity(server) }
@@ -169,6 +177,7 @@ internal object AccountStateMachine {
                         server = server,
                         token = "",
                         encryptedPasswordHash = "",
+                        encryptedPassword = if (clearSavedPassword) "" else record.encryptedPassword,
                         sessionBindingKey = "",
                     )
                 } else {
@@ -200,6 +209,7 @@ internal object AccountStateMachine {
                         server = server,
                         token = if (identityChanged) "" else record.token,
                         encryptedPasswordHash = if (identityChanged) "" else record.encryptedPasswordHash,
+                        encryptedPassword = if (identityChanged) "" else record.encryptedPassword,
                         sessionBindingKey = if (identityChanged) "" else record.sessionBindingKey,
                     )
                 } else {
@@ -251,6 +261,7 @@ internal object AccountStateMachine {
         expectedProfile: ServerProfile,
         token: String,
         encryptedPasswordHash: String = "",
+        encryptedPassword: String = "",
     ): LoginCompletionMutation {
         require(token.isNotBlank()) { "Login token must not be blank" }
         val expected = normalizeNewProfile(expectedProfile)
@@ -263,6 +274,7 @@ internal object AccountStateMachine {
                         record.updated(
                             token = token,
                             encryptedPasswordHash = encryptedPasswordHash,
+                            encryptedPassword = encryptedPassword,
                             sessionBindingKey = token,
                         )
                     } else {
@@ -295,6 +307,56 @@ internal object AccountStateMachine {
     ): Boolean {
         val expected = runCatching { normalizeNewProfile(expectedProfile) }.getOrNull() ?: return false
         return state.records.firstOrNull { it.id == id }?.server == expected
+    }
+
+    /** Removing saved credentials keeps the current login and in-flight work valid. */
+    fun clearSavedLoginCredentials(
+        state: AccountState,
+        id: AccountId,
+        expectedProfile: ServerProfile,
+    ): AccountState {
+        val target = state.records.firstOrNull { it.id == id } ?: return state
+        if (!target.server.hasSameIdentity(expectedProfile)) return state
+        return AccountState(
+            records = state.records.map { record ->
+                if (record.id == id) record.updated(encryptedPasswordHash = "", encryptedPassword = "")
+                else record
+            },
+            activeId = state.activeId,
+        )
+    }
+
+    /** Applies renewal only to its original login generation and current saving preference. */
+    fun replaceAuthentication(
+        state: AccountState,
+        expected: AccountRecord,
+        token: String,
+        clearCredentials: Boolean = false,
+    ): AuthenticationReplacement {
+        require(clearCredentials || token.isNotBlank()) { "Renewed token must not be blank" }
+        val active = state.active
+        if (state.activeId != expected.id || active == null ||
+            active.id != expected.id || active.server != expected.server ||
+            active.token != expected.token || active.sessionBindingKey != expected.sessionBindingKey ||
+            active.encryptedPasswordHash != expected.encryptedPasswordHash ||
+            active.encryptedPassword != expected.encryptedPassword
+        ) return AuthenticationReplacement(state, false)
+
+        return AuthenticationReplacement(
+            state = AccountState(
+                records = state.records.map { record ->
+                    // Expiry or an OTP challenge revokes automatic renewal, not the user's
+                    // decision to keep the password for the next interactive login.
+                    if (record.id == expected.id) record.updated(
+                        token = if (clearCredentials) "" else token,
+                        encryptedPasswordHash = if (clearCredentials) "" else record.encryptedPasswordHash,
+                        sessionBindingKey = if (clearCredentials) "" else record.sessionBindingKey,
+                    ) else record
+                },
+                activeId = state.activeId,
+            ),
+            replaced = true,
+        )
     }
 
     private fun AccountState.requireAccount(id: AccountId): AccountRecord =

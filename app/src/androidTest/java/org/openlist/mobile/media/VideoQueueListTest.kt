@@ -83,7 +83,7 @@ class VideoQueueListTest {
             }
         }
 
-        compose.onNodeWithText("同目录视频").assertIsDisplayed()
+        compose.onNodeWithText("播放队列 · 30").assertIsDisplayed()
         compose.onNodeWithText("正在播放").assertIsDisplayed()
         compose.onNodeWithTag(PlaybackUiTags.VIDEO_QUEUE_LIST).performScrollToIndex(29)
         compose.onNodeWithText("第 30 集").assertIsDisplayed().performClick()

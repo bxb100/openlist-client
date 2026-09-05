@@ -1,15 +1,9 @@
 package org.openlist.mobile.ui
 
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.openlist.mobile.core.model.OpenListObject
 
-@OptIn(ExperimentalCoroutinesApi::class)
 class BrowserScreenStateTest {
     @Test
     fun `directory summary hides placeholder providers but keeps real provider names`() {
@@ -157,64 +151,6 @@ class BrowserScreenStateTest {
             .containsExactly("/photos/cover.jpg", "/photos/current.jpg", "/photos/movie.mp4")
             .inOrder()
         assertThat(siblings[1].item.size).isEqualTo(42)
-    }
-
-    @Test
-    fun `related media buckets preserve stable ordering per media kind`() {
-        val buckets = relatedMediaBuckets(
-            entries = listOf(
-                browserEntry("/photos/one.jpg", "/photos", objectOf("one.jpg")),
-                browserEntry("/photos/two.mp4", "/photos", objectOf("two.mp4", type = 2)),
-                browserEntry("/photos/sub.srt", "/photos", objectOf("sub.srt", type = 4)),
-                browserEntry("/photos/three.jpg", "/photos", objectOf("three.jpg")),
-                browserEntry("/photos/folder", "/photos", objectOf("folder", isDirectory = true)),
-            ),
-        )
-
-        assertThat(buckets.images.map(BrowserEntry::path))
-            .containsExactly("/photos/one.jpg", "/photos/three.jpg")
-            .inOrder()
-        assertThat(buckets.videos.map(BrowserEntry::path)).containsExactly("/photos/two.mp4")
-    }
-
-    @Test
-    fun `last request wins gate rejects stale completion`() = runTest {
-        val gate = LastRequestWinsGate()
-        var applied: String? = null
-        val firstReady = CompletableDeferred<String>()
-        val secondReady = CompletableDeferred<String>()
-
-        val firstRequest = gate.begin()
-        launch {
-            val result = firstReady.await()
-            gate.completeIfLatest(firstRequest) { applied = result }
-        }
-
-        val secondRequest = gate.begin()
-        launch {
-            val result = secondReady.await()
-            gate.completeIfLatest(secondRequest) { applied = result }
-        }
-
-        secondReady.complete("new")
-        advanceUntilIdle()
-        assertThat(applied).isEqualTo("new")
-
-        firstReady.complete("old")
-        advanceUntilIdle()
-        assertThat(applied).isEqualTo("new")
-    }
-
-    @Test
-    fun `invalidating the request gate rejects a pending media result`() {
-        val gate = LastRequestWinsGate()
-        var applied = false
-        val request = gate.begin()
-
-        gate.invalidate()
-        gate.completeIfLatest(request) { applied = true }
-
-        assertThat(applied).isFalse()
     }
 
     private fun browserEntry(

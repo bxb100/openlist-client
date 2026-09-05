@@ -1,6 +1,7 @@
 package org.openlist.mobile.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -8,6 +9,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -17,7 +20,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -25,25 +29,25 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -60,21 +64,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.openlist.mobile.AppContainer
 import org.openlist.mobile.core.model.ServerProfile
 import org.openlist.mobile.data.account.AccountDraft
+import org.openlist.mobile.data.account.AccountId
 import org.openlist.mobile.data.account.AccountSummary
+import org.openlist.mobile.ui.account.ConnectionEndpointFields
+import org.openlist.mobile.ui.account.accountConnectionDraft
+import org.openlist.mobile.ui.designsystem.OpenListEmptyState
+import org.openlist.mobile.ui.theme.OpenListTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,8 +111,8 @@ internal fun AccountScreen(
         action: suspend () -> Unit,
     ) {
         if (busyAccountId != null || sessionBusy) return
+        busyAccountId = id
         scope.launch {
-            busyAccountId = id
             try {
                 action()
             } catch (cancelled: CancellationException) {
@@ -122,7 +131,7 @@ internal fun AccountScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             TopAppBar(
-                title = { Text("账户") },
+                title = { Text("服务器与账户") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
@@ -150,25 +159,36 @@ internal fun AccountScreen(
             modifier = Modifier.fillMaxSize().padding(padding).selectableGroup(),
             contentPadding = PaddingValues(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 104.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             item {
-                Column(Modifier.fillMaxWidth().widthIn(max = 760.dp)) {
+                Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
                     Text(
-                        "已保存账户",
+                        "你的文件空间",
                         modifier = Modifier.semantics { heading() },
                         style = MaterialTheme.typography.headlineSmall,
                     )
                     Text(
-                        "切换账户会停止当前播放并清除受保护目录的临时密码。修改服务器或用户名后需要重新登录。",
+                        "每个账户连接一处文件空间。选择账户即可继续浏览。",
                         modifier = Modifier.padding(top = 6.dp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                    Spacer(Modifier.height(24.dp))
+                }
+            }
+            if (accounts.isEmpty()) {
+                item {
+                    OpenListEmptyState(
+                        icon = Icons.Default.Cloud,
+                        title = "添加第一处文件空间",
+                        description = "填写服务器地址和用户名，登录后即可访问你的文件。",
+                        modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth(),
+                    )
                 }
             }
             if (sessionBusy) {
-                item { LinearProgressIndicator(Modifier.fillMaxWidth().widthIn(max = 760.dp)) }
+                item { LinearProgressIndicator(Modifier.widthIn(max = 720.dp).fillMaxWidth()) }
             }
             items(accounts, key = { it.id.value }) { account ->
                 AccountCard(
@@ -177,8 +197,8 @@ internal fun AccountScreen(
                     actionsEnabled = busyAccountId == null && !sessionBusy,
                     onSwitch = {
                         runAccountAction(account.id.value) {
-                            container.switchAccount(account.id)
-                            if (!account.isAuthenticated) onLoginRequired()
+                            if (!account.isActive) container.switchAccount(account.id)
+                            if (!account.isAuthenticated) onLoginRequired() else onBack()
                         }
                     },
                     onEdit = {
@@ -275,7 +295,7 @@ internal fun AccountScreen(
 }
 
 @Composable
-private fun AccountCard(
+internal fun AccountCard(
     account: AccountSummary,
     busy: Boolean,
     actionsEnabled: Boolean,
@@ -283,114 +303,76 @@ private fun AccountCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth().widthIn(max = 760.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (account.isActive) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerLow
-            },
-            contentColor = if (account.isActive) {
-                MaterialTheme.colorScheme.onPrimaryContainer
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            },
-        ),
+    var showMenu by remember { mutableStateOf(false) }
+    Surface(
+        modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth(),
+        color = if (account.isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .35f)
+            else MaterialTheme.colorScheme.surface,
     ) {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+        Column {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .selectable(
-                        selected = account.isActive,
-                        enabled = actionsEnabled,
-                        role = Role.RadioButton,
-                        onClick = { if (!account.isActive) onSwitch() },
-                    )
-                    .padding(vertical = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Surface(
-                    modifier = Modifier.size(48.dp),
-                    shape = MaterialTheme.shapes.large,
-                    color = if (account.isActive) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.secondaryContainer
-                    },
+                Row(
+                    modifier = Modifier.weight(1f)
+                        .selectable(
+                            selected = account.isActive,
+                            enabled = actionsEnabled,
+                            role = Role.RadioButton,
+                            onClick = onSwitch,
+                        ).padding(vertical = 18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
-                        Icons.Default.Person,
+                        Icons.Default.Cloud,
                         contentDescription = null,
-                        modifier = Modifier.padding(12.dp),
-                        tint = if (account.isActive) {
-                            MaterialTheme.colorScheme.onPrimary
-                        } else {
-                            MaterialTheme.colorScheme.onSecondaryContainer
-                        },
+                        tint = if (account.isActive) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(28.dp),
                     )
+                    Spacer(Modifier.width(16.dp))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(account.displayName, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            account.server.baseUrl,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "${account.server.username} · ${if (account.isAuthenticated) "已登录" else "需要登录"}" +
+                                if (account.isActive) " · 当前使用" else "",
+                            color = if (account.requiresLogin) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                    if (busy) CircularProgressIndicator(Modifier.padding(start = 8.dp).size(20.dp), strokeWidth = 2.dp)
                 }
-                Spacer(Modifier.width(14.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        account.displayName,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        "${account.server.username} · ${account.server.baseUrl}",
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        color = if (account.isActive) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                if (busy) {
-                    CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                } else {
-                    RadioButton(
-                        selected = account.isActive,
-                        onClick = null,
-                        enabled = actionsEnabled,
-                    )
-                }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = onDelete, enabled = actionsEnabled) {
-                    Icon(Icons.Default.Delete, contentDescription = "删除 ${account.displayName}")
-                }
-                IconButton(onClick = onEdit, enabled = actionsEnabled) {
-                    Icon(Icons.Default.Edit, contentDescription = "编辑 ${account.displayName}")
-                }
-                if (account.isActive) {
-                    Text(
-                        "当前使用",
-                        modifier = Modifier.clearAndSetSemantics { },
-                        color = MaterialTheme.colorScheme.primary,
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                } else if (!account.isAuthenticated) {
-                    Text(
-                        "需要登录",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.labelLarge,
-                    )
+                Box {
+                    IconButton(onClick = { showMenu = true }, enabled = actionsEnabled) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "${account.displayName}的更多操作")
+                    }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("编辑连接") },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = { showMenu = false; onEdit() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("移除账户", color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                            onClick = { showMenu = false; onDelete() },
+                        )
+                    }
                 }
             }
+            HorizontalDivider(Modifier.padding(start = 60.dp), color = MaterialTheme.colorScheme.outlineVariant)
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AccountEditorDialog(
     account: AccountSummary?,
@@ -400,194 +382,125 @@ private fun AccountEditorDialog(
     operationError: String?,
     onOperationErrorCleared: () -> Unit,
 ) {
-    val creating = account == null
+    val initial = remember(account?.id?.value) {
+        LoginEndpointDraft.fromBaseUrl(account?.server?.baseUrl.orEmpty())
+    }
     var displayName by rememberSaveable(account?.id?.value) { mutableStateOf(account?.displayName.orEmpty()) }
-    var server by rememberSaveable(account?.id?.value) { mutableStateOf(account?.server?.baseUrl.orEmpty()) }
+    var host by rememberSaveable(account?.id?.value) { mutableStateOf(initial.host) }
+    var protocolName by rememberSaveable(account?.id?.value) { mutableStateOf(initial.protocol.name) }
+    var port by rememberSaveable(account?.id?.value) { mutableStateOf(initial.port) }
+    var basePath by rememberSaveable(account?.id?.value) { mutableStateOf(initial.basePath) }
     var username by rememberSaveable(account?.id?.value) { mutableStateOf(account?.server?.username.orEmpty()) }
-    var allowHttp by rememberSaveable(account?.id?.value) {
-        mutableStateOf(account?.server?.allowInsecureHttp ?: false)
-    }
-    val usesHttp = server.isNotBlank() && if (creating) {
-        LoginEndpointDraft.fromBaseUrl(server).protocol == LoginProtocol.HTTP
-    } else {
-        server.trim().startsWith("http://", ignoreCase = true)
-    }
-    val draftProfile = runCatching {
-        accountEditorServerProfile(
-            server = server,
+    var allowHttp by rememberSaveable(account?.id?.value) { mutableStateOf(account?.server?.allowInsecureHttp ?: true) }
+    val endpoint = LoginEndpointDraft(host, LoginProtocol.valueOf(protocolName), port, basePath)
+    val validation = runCatching {
+        accountConnectionDraft(
+            displayName = displayName,
+            endpoint = endpoint,
             username = username,
-            creating = creating,
-            allowHttp = allowHttp,
-        )
-    }.getOrNull()
-    val validationError = when {
-        server.isBlank() -> "请输入服务器地址"
-        username.isBlank() -> "请输入用户名"
-        usesHttp && !creating && !allowHttp -> "使用 HTTP 前需要确认允许明文连接"
-        draftProfile == null -> "服务器地址无效"
-        else -> runCatching { draftProfile.normalizedBaseUrl() }.exceptionOrNull()?.message
+            allowInsecureHttp = allowHttp,
+            savedServer = account?.server,
+        ).also { it.server.normalizedBaseUrl() }
+    }
+    val draft = validation.getOrNull()
+    val canSave = draft != null && username.isNotBlank() && !busy
+    fun updateEndpoint(value: LoginEndpointDraft) {
+        host = value.host
+        protocolName = value.protocol.name
+        port = value.port
+        basePath = value.basePath
+        allowHttp = value.protocol == LoginProtocol.HTTP
+        onOperationErrorCleared()
+    }
+    fun save() {
+        if (canSave && draft != null) onSave(draft)
     }
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = { if (!busy) onDismiss() },
-        icon = { Icon(Icons.Default.Cloud, contentDescription = null) },
-        title = { Text(if (account == null) "添加账户" else "编辑账户") },
-        text = {
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(if (account == null) "添加账户" else "编辑连接") },
+                    navigationIcon = {
+                        IconButton(onClick = onDismiss, enabled = !busy) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "取消编辑")
+                        }
+                    },
+                )
+            },
+        ) { padding ->
             Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize().padding(padding).imePadding()
+                    .verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                AccountEditorFieldCard {
-                    OutlinedTextField(
-                        value = displayName,
-                        onValueChange = {
-                            displayName = it.take(80)
-                            onOperationErrorCleared()
-                        },
-                        label = { Text("显示名称（可选）") },
-                        singleLine = true,
-                        enabled = !busy,
-                        colors = transparentOutlinedTextFieldColors(),
-                        modifier = Modifier.fillMaxWidth(),
+                Column(
+                    Modifier.widthIn(max = 480.dp).fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                ) {
+                    Text(
+                        if (account == null) "连接另一处文件空间" else "连接信息",
+                        modifier = Modifier.semantics { heading() },
+                        style = MaterialTheme.typography.headlineSmall,
                     )
-                }
-                AccountEditorFieldCard {
-                    OutlinedTextField(
-                        value = server,
-                        onValueChange = {
-                            server = it
-                            if (!it.trim().startsWith("http://", ignoreCase = true)) allowHttp = false
-                            onOperationErrorCleared()
-                        },
-                        label = { Text(if (creating) "服务器地址 / IP" else "服务器地址") },
-                        placeholder = { Text(if (creating) "192.168.1.100" else "https://files.example.com") },
-                        supportingText = if (creating) {
-                            { Text("未填写协议时默认使用 HTTP 和 5244 端口") }
-                        } else {
-                            null
-                        },
-                        singleLine = true,
+                    ConnectionEndpointFields(
+                        endpoint = endpoint,
+                        onHostChange = { updateEndpoint(endpoint.withAddressInput(it)) },
+                        onEndpointChange = ::updateEndpoint,
                         enabled = !busy,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                        colors = transparentOutlinedTextFieldColors(),
-                        modifier = Modifier.fillMaxWidth(),
+                        error = validation.exceptionOrNull()?.message?.takeIf { host.isNotBlank() },
                     )
-                }
-                AccountEditorFieldCard {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     OutlinedTextField(
                         value = username,
-                        onValueChange = {
-                            username = it
-                            onOperationErrorCleared()
-                        },
+                        onValueChange = { username = it; onOperationErrorCleared() },
                         label = { Text("用户名") },
-                        singleLine = true,
                         enabled = !busy,
-                        colors = transparentOutlinedTextFieldColors(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                         modifier = Modifier.fillMaxWidth(),
                     )
-                }
-                if (usesHttp && creating) {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                        ),
-                        shape = MaterialTheme.shapes.large,
-                    ) {
+                    OutlinedTextField(
+                        value = displayName,
+                        onValueChange = { displayName = it.take(80); onOperationErrorCleared() },
+                        label = { Text("账户名称（可选）") },
+                        supportingText = { Text("例如：家里的 NAS、工作文件") },
+                        enabled = !busy,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { save() }),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (account != null) {
                         Text(
-                            "HTTP 不会加密登录凭据；公网服务器强烈建议改用 HTTPS。",
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                            style = MaterialTheme.typography.bodySmall,
+                            "修改服务器或用户名后，这个账户需要重新登录。",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
                         )
                     }
-                } else if (usesHttp) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .toggleable(
-                                value = allowHttp,
-                                enabled = !busy,
-                                role = Role.Switch,
-                                onValueChange = {
-                                    allowHttp = it
-                                    onOperationErrorCleared()
-                                },
-                            )
-                            .padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                    operationError?.let { DialogOperationError(it) }
+                    Button(
+                        onClick = ::save,
+                        enabled = canSave,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                     ) {
-                        Column(Modifier.weight(1f)) {
-                            Text("允许明文 HTTP", style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                "连接和登录凭据不会加密",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodySmall,
+                        if (busy) {
+                            CircularProgressIndicator(
+                                Modifier.size(20.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp,
                             )
-                        }
-                        Switch(checked = allowHttp, onCheckedChange = null, enabled = !busy)
+                            Spacer(Modifier.width(12.dp))
+                            Text("正在保存")
+                        } else Text(if (account == null) "保存并继续登录" else "保存连接")
                     }
                 }
-                validationError?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
-                operationError?.let { DialogOperationError(it) }
-                if (account != null) {
-                    Text(
-                        "更改服务器或用户名会清除该账户原有令牌；下次使用该账户时需要重新登录。",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    draftProfile?.let { onSave(AccountDraft(displayName.trim(), it)) }
-                },
-                enabled = validationError == null && !busy,
-            ) {
-                if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                else Text(if (account == null) "继续登录" else "保存")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !busy) { Text("取消") }
-        },
-    )
-}
-
-@Composable
-private fun AccountEditorFieldCard(content: @Composable () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        ),
-    ) {
-        Column(Modifier.fillMaxWidth().padding(10.dp)) {
-            content()
         }
     }
-}
-
-/** New accounts share login endpoint defaults; edits preserve the stored URL's exact semantics. */
-internal fun accountEditorServerProfile(
-    server: String,
-    username: String,
-    creating: Boolean,
-    allowHttp: Boolean,
-): ServerProfile = if (creating) {
-    LoginEndpointDraft.fromBaseUrl(server).serverProfile(username)
-} else {
-    val trimmedServer = server.trim()
-    ServerProfile(
-        baseUrl = trimmedServer,
-        username = username.trim(),
-        allowInsecureHttp = trimmedServer.startsWith("http://", ignoreCase = true) && allowHttp,
-    )
 }
 
 @Composable
@@ -599,11 +512,32 @@ private fun DialogOperationError(message: String) {
         shape = MaterialTheme.shapes.small,
     ) {
         Text(
-            text = "操作失败：$message",
-            modifier = Modifier
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-                .semantics { liveRegion = LiveRegionMode.Assertive },
+            text = message,
+            modifier = Modifier.padding(12.dp).semantics { liveRegion = LiveRegionMode.Assertive },
             style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
+@Preview(name = "Saved connection", showBackground = true, widthDp = 412)
+@Preview(name = "Saved connection large text", showBackground = true, widthDp = 360, fontScale = 2f)
+@Composable
+private fun AccountConnectionPreview() {
+    OpenListTheme {
+        AccountCard(
+            account = AccountSummary(
+                id = AccountId("preview"),
+                displayName = "家里的 NAS",
+                server = ServerProfile("https://nas.example.com/openlist", "xiaobo"),
+                isActive = true,
+                isAuthenticated = true,
+                requiresLogin = false,
+            ),
+            busy = false,
+            actionsEnabled = true,
+            onSwitch = {},
+            onEdit = {},
+            onDelete = {},
         )
     }
 }

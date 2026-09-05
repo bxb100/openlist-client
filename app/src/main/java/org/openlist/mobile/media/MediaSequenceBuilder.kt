@@ -6,10 +6,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.openlist.mobile.core.model.DirectoryListing
 import org.openlist.mobile.core.model.FileDetails
+import org.openlist.mobile.core.model.FileVisibilityRule
 import org.openlist.mobile.core.model.MediaKind
 import org.openlist.mobile.core.model.OpenListObject
 import org.openlist.mobile.core.model.joinRemotePath
 import org.openlist.mobile.core.model.parentRemotePath
+import org.openlist.mobile.core.util.FileVisibilityMatcher
 import org.openlist.mobile.data.repository.OpenListRepository
 
 fun interface DirectoryMediaSource {
@@ -22,11 +24,13 @@ class MediaSequenceBuilder(
     private val serverIdentity: () -> String,
     private val accountIdentity: () -> String = { "" },
     private val computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val visibilityRules: () -> List<FileVisibilityRule> = { emptyList() },
 ) {
     constructor(repository: OpenListRepository) : this(
         directorySource = DirectoryMediaSource { directory -> repository.list(directory) },
         serverIdentity = { repository.settings.value.server.baseUrl },
         accountIdentity = { repository.settings.value.server.username },
+        visibilityRules = { repository.settings.value.fileVisibilityRules },
     )
 
     suspend fun build(currentPath: String, current: FileDetails): MediaSequence =
@@ -83,6 +87,7 @@ class MediaSequenceBuilder(
         val parent: String = parentRemotePath(normalizedCurrentPath)
         val currentName: String = current.name.ifBlank { normalizedCurrentPath.substringAfterLast('/') }
         val currentKind: MediaKind = MediaTypeDetector.kind(current, currentName)
+        private val visibilityMatcher = FileVisibilityMatcher.compile(visibilityRules())
 
         init {
             require(currentKind in supportedMediaKinds) { "The selected object is not supported media" }
@@ -116,6 +121,9 @@ class MediaSequenceBuilder(
                 val siblingKind = MediaTypeDetector.kind(sibling)
                 if (siblingKind != currentEntry.kind) return@forEach
                 val siblingPath = normalizeRemotePath(joinRemotePath(parent, sibling.name))
+                if (siblingPath != normalizedCurrentPath &&
+                    !visibilityMatcher.isPathVisible(siblingPath, isDirectory = false)
+                ) return@forEach
                 byPath.putIfAbsent(
                     siblingPath,
                     sibling.toMediaEntry(
@@ -127,9 +135,9 @@ class MediaSequenceBuilder(
                 )
             }
 
-            // The supplied snapshot may be stale or paginated. The selected item remains playable
-            // either way, and replacing an existing entry keeps the caller's ordering while the
-            // tapped item's metadata stays authoritative.
+            // The snapshot may be stale, paginated or hide the selected item under new rules.
+            // Explicit selection remains playable. Replacing an existing entry keeps the caller's
+            // ordering while the tapped item's metadata stays authoritative.
             byPath[normalizedCurrentPath] = currentEntry
 
             val items = byPath.values.toList()

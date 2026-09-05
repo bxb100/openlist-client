@@ -62,4 +62,63 @@ class LoginEndpointDraftTest {
         assertThat(profile.allowInsecureHttp).isTrue()
         assertThat(profile.normalizedBaseUrl()).isEqualTo("http://files.example.com:5244")
     }
+
+    @Test
+    fun `pasting a full URL replaces all previous advanced options`() {
+        val previous = LoginEndpointDraft("nas.local", LoginProtocol.HTTP, "5244", "/old")
+        val pasted = previous.withAddressInput(" https://files.example.com/team%2Ffiles ")
+
+        assertThat(pasted.protocol).isEqualTo(LoginProtocol.HTTPS)
+        assertThat(pasted.port).isEmpty()
+        assertThat(pasted.baseUrl()).isEqualTo("https://files.example.com/team%2Ffiles")
+    }
+
+    @Test
+    fun `proxy paths preserve encoded separators and encode new spaces`() {
+        val endpoint = LoginEndpointDraft.fromBaseUrl("https://files.example.com/team%2Ffiles/%E6%96%87%E4%BB%B6")
+
+        assertThat(endpoint.baseUrl()).isEqualTo("https://files.example.com/team%2Ffiles/%E6%96%87%E4%BB%B6")
+        assertThat(endpoint.copy(basePath = "/team files").baseUrl())
+            .isEqualTo("https://files.example.com/team%20files")
+    }
+
+    @Test
+    fun `editing a plain hostname retains manually selected connection options`() {
+        val previous = LoginEndpointDraft("old.local", LoginProtocol.HTTPS, "8443", "/proxy")
+
+        assertThat(previous.withAddressInput("new.local").baseUrl())
+            .isEqualTo("https://new.local:8443/proxy")
+    }
+
+    @Test
+    fun `pasted explicit IPv6 URL retains its scheme and port`() {
+        val pasted = LoginEndpointDraft().withAddressInput("https://[fd00::2]:8443/openlist")
+
+        assertThat(pasted.baseUrl()).isEqualTo("https://[fd00::2]:8443/openlist")
+    }
+
+    @Test
+    fun `invalid pasted endpoints are not silently replaced by valid defaults`() {
+        listOf(
+            "ftp://files.example.com",
+            "https://files.example.com:wrong",
+            "https://files.example.com:65536",
+            "https://user:password@files.example.com",
+            "https://files.example.com/path?token=secret",
+            "https://files.example.com/#fragment",
+        ).forEach { source ->
+            val pasted = LoginEndpointDraft(host = "old.local").withAddressInput(source)
+            assertThat(runCatching { pasted.baseUrl() }.isFailure).isTrue()
+        }
+    }
+
+    @Test
+    fun `pasted proxy path preserves repeated leading slashes`() {
+        val pasted = LoginEndpointDraft().withAddressInput("https://files.example.com//tenant/team%2Ffiles")
+
+        assertThat(pasted.basePath).isEqualTo("//tenant/team%2Ffiles")
+        assertThat(pasted.baseUrl()).isEqualTo("https://files.example.com//tenant/team%2Ffiles")
+        assertThat(pasted.copy(basePath = "//tenant/team files").baseUrl())
+            .isEqualTo("https://files.example.com//tenant/team%20files")
+    }
 }

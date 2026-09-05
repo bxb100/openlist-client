@@ -28,12 +28,17 @@ class OpenListRepository internal constructor(
 ) {
     val settings: StateFlow<AppSettings> = sessionStore.settings
 
-    suspend fun login(profile: ServerProfile, password: String, otpCode: String = ""): OpenListUser {
+    suspend fun login(
+        profile: ServerProfile,
+        password: String,
+        otpCode: String = "",
+        savePassword: Boolean = false,
+    ): OpenListUser {
         val normalizedProfile = profile.copy(baseUrl = profile.normalizedBaseUrl())
         if (!sessionStore.snapshot().server.hasSameCredentialIdentity(normalizedProfile)) {
             pathCredentials.clear()
         }
-        val targetAccountId = sessionStore.beginLogin(normalizedProfile)
+        val targetAccountId = sessionStore.beginLogin(normalizedProfile, clearSavedPassword = !savePassword)
         val passwordHash = PasswordHasher.forOpenList(password)
         val login = try {
             api.loginWithHash(
@@ -51,11 +56,14 @@ class OpenListRepository internal constructor(
         }
 
         val completion = try {
-            val encryptedPasswordHash = withContext(Dispatchers.IO) {
+            val encryptedPasswordHash = if (savePassword) withContext(Dispatchers.IO) {
                 credentialCipher.encrypt(passwordHash, targetAccountId)
-            }
+            } else ""
+            val encryptedPassword = if (savePassword) withContext(Dispatchers.IO) {
+                credentialCipher.encryptPassword(password, targetAccountId)
+            } else ""
             sessionStore.completeLogin(
-                targetAccountId, normalizedProfile, login.token, encryptedPasswordHash,
+                targetAccountId, normalizedProfile, login.token, encryptedPasswordHash, encryptedPassword,
             )
         } catch (error: Throwable) {
             failLoginTarget(targetAccountId, normalizedProfile)
@@ -82,6 +90,28 @@ class OpenListRepository internal constructor(
             throw LoginSupersededException(targetAccountId)
         }
         return user
+    }
+
+    internal suspend fun savedLoginCredential(profile: ServerProfile): SavedLoginCredential? {
+        sessionStore.awaitLoaded()
+        val account = sessionStore.accountForProfile(profile) ?: return null
+        if (account.encryptedPassword.isBlank() && account.encryptedPasswordHash.isBlank()) return null
+        // A pre-checkbox installation may only have a saved hash; it remains usable for renewal,
+        // but hashes cannot recover the original password for the login field.
+        val password = if (account.encryptedPassword.isNotBlank()) withContext(Dispatchers.IO) {
+            credentialCipher.decryptPassword(account.encryptedPassword, account.id)
+        } else ""
+        val current = sessionStore.accountForProfile(profile)
+        if (current?.id != account.id || current.encryptedPassword != account.encryptedPassword ||
+            current.encryptedPasswordHash != account.encryptedPasswordHash
+        ) return null
+        return SavedLoginCredential(password)
+    }
+
+    internal suspend fun clearSavedLoginCredential(profile: ServerProfile) {
+        sessionStore.awaitLoaded()
+        val account = sessionStore.accountForProfile(profile) ?: return
+        sessionStore.clearSavedLoginCredentials(account.id, profile)
     }
 
     private suspend fun failLoginTarget(accountId: AccountId, expectedProfile: ServerProfile) {
@@ -146,6 +176,11 @@ class OpenListRepository internal constructor(
             password = pathCredentials.passwordFor(profile, parent),
         )
     }
+}
+
+/** Decrypted form state is deliberately absent from saved-instance state and diagnostics. */
+internal class SavedLoginCredential(val password: String) {
+    override fun toString(): String = "SavedLoginCredential(password=<redacted>)"
 }
 
 /**

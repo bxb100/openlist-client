@@ -12,3 +12,5 @@ keystore.properties
 *.keystore
 .delta
 .kotlin
+
+./app/src/screenshotTestDebug/**/*

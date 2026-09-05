@@ -16,31 +16,36 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitDragOrCancellation
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Fullscreen
@@ -57,6 +62,7 @@ import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.SkipNext
@@ -66,8 +72,6 @@ import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -82,6 +86,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -101,10 +106,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.ScaleFactor
 import androidx.compose.ui.platform.LocalContext
@@ -112,6 +119,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.view.WindowCompat
@@ -131,6 +141,8 @@ import android.widget.Toast
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.roundToInt
+import org.openlist.mobile.ui.theme.OpenListMediaColors
 
 /**
  * Full-screen MD3 playback UI for the service-backed [OpenListPlaybackController].
@@ -142,6 +154,7 @@ internal object PlaybackUiTags {
     const val VIDEO_QUEUE_CONTAINER = "video_queue_container"
     const val VIDEO_QUEUE_LIST = "video_queue_list"
     const val VIDEO_GESTURE_SURFACE = "video_gesture_surface"
+    const val VIDEO_ADJUSTMENT_FEEDBACK = "video_adjustment_feedback"
     const val VIDEO_ZOOM_TOGGLE = "video_zoom_toggle"
     const val PROGRESS_SLIDER = "playback_progress_slider"
     const val PLAYBACK_SPEED = "playback_speed"
@@ -177,6 +190,7 @@ internal fun playbackChromePalette(colorScheme: ColorScheme): PlaybackChromePale
         selectedQueueContent = colorScheme.onSecondaryContainer,
     )
 
+/** Pages and sheets inherit the app theme; controls over video carry their own paired colors. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaybackOverlay(
@@ -194,6 +208,8 @@ fun PlaybackOverlay(
     val player = controller.mediaController
     val current = state.currentItem
     val isVideo = current?.isVideo == true
+    val inPictureInPicture = rememberIsInPictureInPictureMode(activity)
+    val deviceControls = rememberPlaybackDeviceControls(activity, isVideo && !inPictureInPicture)
     KeepVideoScreenAwake(
         enabled = shouldKeepVideoScreenAwake(
             isVideo = isVideo,
@@ -263,6 +279,7 @@ fun PlaybackOverlay(
     if (isFullscreen && isVideo) {
         FullscreenVideoPlaybackContent(
             controller = controller,
+            deviceControls = deviceControls,
             state = state,
             errorMessage = errorState.error?.message,
             playbackInfoVisible = showPlaybackInfo,
@@ -271,10 +288,9 @@ fun PlaybackOverlay(
             modifier = modifier.fillMaxSize(),
         )
     } else if (isVideo && current != null) {
-        // Windowed video draws its own chrome over the frame (back top-left, more top-right),
-        // so it skips the app bar and lets the sibling list of other videos sit below it.
         VideoPlaybackContent(
             controller = controller,
+            deviceControls = deviceControls,
             state = state,
             errorMessage = errorState.error?.message,
             onBack = dismissPlayback,
@@ -291,7 +307,7 @@ fun PlaybackOverlay(
                 CenterAlignedTopAppBar(
                     title = {
                         Text(
-                            text = current?.displayTitle.orEmpty().ifBlank { "媒体播放" },
+                            text = "正在播放",
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -374,9 +390,11 @@ internal fun shouldKeepVideoScreenAwake(
                 (playWhenReady && playbackState == Player.STATE_BUFFERING)
         )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun VideoPlaybackContent(
     controller: OpenListPlaybackController,
+    deviceControls: PlaybackDeviceControls?,
     state: PlaybackControllerState,
     errorMessage: String?,
     onBack: () -> Unit,
@@ -384,73 +402,103 @@ private fun VideoPlaybackContent(
     onEnterFullscreen: () -> Unit,
     modifier: Modifier,
 ) {
-    val chrome = playbackChromePalette(MaterialTheme.colorScheme)
-    Column(modifier.background(chrome.pageContainer)) {
-        Box(Modifier.fillMaxWidth().weight(1.15f).background(Color.Black)) {
+    Scaffold(
+        modifier = modifier,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("视频播放") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "关闭播放界面")
+                    }
+                },
+                actions = {
+                    PlaybackInfoButton(onClick = onShowPlaybackInfo, onVideoSurface = false)
+                },
+            )
+        },
+    ) { padding ->
+        BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
+            val wide = maxWidth >= 840.dp && LocalDensity.current.fontScale < 1.5f
+            if (wide) {
+                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                    WindowedVideoPlayer(
+                        controller, deviceControls, state, errorMessage, onEnterFullscreen,
+                        Modifier.weight(1.8f).fillMaxSize(),
+                    )
+                    VideoQueueList(
+                        queue = state.queue,
+                        currentIndex = state.currentIndex,
+                        isPlaying = state.isPlaying,
+                        onSelect = controller::play,
+                        modifier = Modifier.weight(1f).fillMaxSize(),
+                    )
+                }
+            } else {
+                Column(Modifier.fillMaxSize()) {
+                    WindowedVideoPlayer(
+                        controller, deviceControls, state, errorMessage, onEnterFullscreen,
+                        Modifier.fillMaxWidth().weight(1.6f),
+                    )
+                    VideoQueueList(
+                        queue = state.queue,
+                        currentIndex = state.currentIndex,
+                        isPlaying = state.isPlaying,
+                        onSelect = controller::play,
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WindowedVideoPlayer(
+    controller: OpenListPlaybackController,
+    deviceControls: PlaybackDeviceControls?,
+    state: PlaybackControllerState,
+    errorMessage: String?,
+    onEnterFullscreen: () -> Unit,
+    modifier: Modifier,
+) {
+    Column(modifier.verticalScroll(rememberScrollState())) {
+        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(OpenListMediaColors.canvas)) {
             VideoViewport(
                 controller = controller,
+                deviceControls = deviceControls,
                 playWhenReady = state.playWhenReady,
                 playbackState = state.playbackState,
                 modifier = Modifier.fillMaxSize(),
             )
             if (state.playbackState == Player.STATE_BUFFERING) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center),
-                    color = Color.White,
-                )
+                CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
             }
-            // Overlaid chrome: back (top-left) and the overflow menu (top-right), below the status bar.
-            Row(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                PlaybackChromeIconButton(
-                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "返回",
-                    onClick = onBack,
-                )
-                FullscreenMoreMenu(onShowPlaybackInfo = onShowPlaybackInfo)
-            }
-            // Bottom bar over the video: play/pause + scrubber + enlarge only.
-            errorMessage?.let {
-                PlaybackError(
-                    it,
-                    onVideoSurface = true,
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 64.dp),
-                )
-            }
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.35f))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                PlaybackControls(
-                    controller = controller,
-                    state = state,
-                    onVideoSurface = true,
-                    showTransportRow = false,
-                    modifier = Modifier.weight(1f),
-                )
-                FullscreenToggleButton(
-                    isFullscreen = false,
-                    onToggle = onEnterFullscreen,
-                )
-            }
+            FullscreenToggleButton(
+                isFullscreen = false,
+                onToggle = onEnterFullscreen,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
+            )
         }
-        VideoQueueList(
-            queue = state.queue,
-            currentIndex = state.currentIndex,
-            isPlaying = state.isPlaying,
-            onSelect = controller::play,
-            modifier = Modifier.fillMaxWidth().weight(1f),
-        )
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = state.currentItem?.displayTitle.orEmpty(),
+                style = MaterialTheme.typography.titleLarge,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { heading() },
+            )
+            errorMessage?.let { PlaybackError(it, onVideoSurface = false) }
+            PlaybackControls(
+                controller = controller,
+                state = state,
+                onVideoSurface = false,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 
@@ -458,6 +506,7 @@ private fun VideoPlaybackContent(
 @Composable
 private fun FullscreenVideoPlaybackContent(
     controller: OpenListPlaybackController,
+    deviceControls: PlaybackDeviceControls?,
     state: PlaybackControllerState,
     errorMessage: String?,
     playbackInfoVisible: Boolean,
@@ -480,6 +529,7 @@ private fun FullscreenVideoPlaybackContent(
     var locked by rememberSaveable { mutableStateOf(false) }
     var lockControlsVisible by remember { mutableStateOf(true) }
     var showPlaylistSheet by rememberSaveable { mutableStateOf(false) }
+    var showOptionsSheet by rememberSaveable { mutableStateOf(false) }
     var showAudioSheet by rememberSaveable { mutableStateOf(false) }
     var showSubtitleSheet by rememberSaveable { mutableStateOf(false) }
     var screenshotInProgress by remember { mutableStateOf(false) }
@@ -502,7 +552,8 @@ private fun FullscreenVideoPlaybackContent(
         }
     }
     val interactionActive =
-        controlInteractionActive || videoInteractionActive || playbackInfoVisible
+        controlInteractionActive || videoInteractionActive || playbackInfoVisible ||
+            showOptionsSheet || showPlaylistSheet || showAudioSheet || showSubtitleSheet
     val toggleControls = {
         if (controlsVisible) {
             controlsVisible = false
@@ -567,6 +618,7 @@ private fun FullscreenVideoPlaybackContent(
     Box(modifier.background(Color.Black)) {
         VideoViewport(
             controller = controller,
+            deviceControls = deviceControls,
             playWhenReady = state.playWhenReady,
             playbackState = state.playbackState,
             onTap = {
@@ -579,6 +631,7 @@ private fun FullscreenVideoPlaybackContent(
                 }
             },
             scaleMode = videoScaleMode,
+            gesturesEnabled = !locked && !inPictureInPicture,
             onInteractionActiveChange = currentVideoInteraction,
             modifier = Modifier.fillMaxSize(),
         )
@@ -617,70 +670,14 @@ private fun FullscreenVideoPlaybackContent(
                     onClick = onExitFullscreen,
                     modifier = Modifier.align(Alignment.TopStart).padding(12.dp),
                 )
-                // Top-right: aspect ratio, picture-in-picture, and an overflow menu (info).
-                Row(
-                    modifier = Modifier.align(Alignment.TopEnd).padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    VideoScaleToggleButton(
-                        isZoomed = videoScaleMode == VideoScaleMode.ZOOMED,
-                        onToggle = {
-                            val result = toggleVideoScale(videoScaleMode)
-                            videoScaleMode = result.scaleMode
-                            interactionEpoch += 1
-                        },
-                    )
-                    if (activity != null && context.supportsPictureInPicture()) {
-                        PlaybackChromeIconButton(
-                            icon = Icons.Default.PictureInPictureAlt,
-                            contentDescription = "画中画",
-                            onClick = {
-                                interactionEpoch += 1
-                                activity.enterPlaybackPictureInPicture()
-                            },
-                        )
-                    }
-                    FullscreenMoreMenu(
-                        onShowPlaybackInfo = {
-                            interactionEpoch += 1
-                            onShowPlaybackInfo()
-                        },
-                    )
-                }
-                // Center-left: screenshot and screen lock.
-                Column(
-                    modifier = Modifier.align(Alignment.CenterStart).padding(start = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    PlaybackChromeIconButton(
-                        icon = Icons.Default.PhotoCamera,
-                        contentDescription = "截屏",
-                        onClick = takeScreenshot,
-                    )
-                    PlaybackChromeIconButton(
-                        icon = Icons.Default.LockOpen,
-                        contentDescription = "锁定屏幕",
-                        onClick = {
-                            locked = true
-                            lockControlsVisible = true
-                            controlsVisible = false
-                            interactionEpoch += 1
-                        },
-                    )
-                }
-                // Center-right: playback speed stepper.
-                FullscreenSpeedStepper(
-                    speed = state.playbackSpeed,
-                    enabled = canChangeSpeedNow,
-                    onStep = { increase ->
-                        if (player.isCommandAvailable(Player.COMMAND_SET_SPEED_AND_PITCH)) {
-                            controller.setPlaybackSpeed(
-                                steppedPlaybackSpeed(player.playbackParameters.speed, increase),
-                            )
-                        }
+                PlaybackChromeIconButton(
+                    icon = Icons.Default.MoreVert,
+                    contentDescription = "播放选项",
+                    onClick = {
+                        showOptionsSheet = true
                         interactionEpoch += 1
                     },
-                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp),
+                    modifier = Modifier.align(Alignment.TopEnd).padding(12.dp),
                 )
                 // Bottom: title, scrubber + transport, and bottom-right actions.
                 Column(
@@ -736,6 +733,74 @@ private fun FullscreenVideoPlaybackContent(
         }
     }
 
+    if (showOptionsSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showOptionsSheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+                Text(
+                    "播放选项",
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp).semantics { heading() },
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("播放速度", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                    IconButton(
+                        enabled = canChangeSpeedNow,
+                        onClick = {
+                            if (player.isCommandAvailable(Player.COMMAND_SET_SPEED_AND_PITCH)) {
+                                controller.setPlaybackSpeed(steppedPlaybackSpeed(player.playbackParameters.speed, false))
+                            }
+                        },
+                    ) { Icon(Icons.Default.Remove, contentDescription = "减慢播放速度") }
+                    Text(formatPlaybackSpeed(state.playbackSpeed), style = MaterialTheme.typography.titleMedium)
+                    IconButton(
+                        enabled = canChangeSpeedNow,
+                        onClick = {
+                            if (player.isCommandAvailable(Player.COMMAND_SET_SPEED_AND_PITCH)) {
+                                controller.setPlaybackSpeed(steppedPlaybackSpeed(player.playbackParameters.speed, true))
+                            }
+                        },
+                    ) { Icon(Icons.Default.Add, contentDescription = "加快播放速度") }
+                }
+                PlaybackOptionRow(
+                    icon = if (videoScaleMode == VideoScaleMode.ZOOMED) Icons.Default.ZoomOut else Icons.Default.ZoomIn,
+                    title = if (videoScaleMode == VideoScaleMode.ZOOMED) "恢复完整画面" else "放大画面",
+                    onClick = {
+                        videoScaleMode = toggleVideoScale(videoScaleMode).scaleMode
+                        showOptionsSheet = false
+                    },
+                )
+                if (activity != null && context.supportsPictureInPicture()) {
+                    PlaybackOptionRow(Icons.Default.PictureInPictureAlt, "画中画") {
+                        showOptionsSheet = false
+                        activity.enterPlaybackPictureInPicture()
+                    }
+                }
+                PlaybackOptionRow(Icons.Default.PhotoCamera, "截屏") {
+                    showOptionsSheet = false
+                    takeScreenshot()
+                }
+                PlaybackOptionRow(Icons.Default.LockOpen, "锁定屏幕") {
+                    showOptionsSheet = false
+                    locked = true
+                    lockControlsVisible = true
+                    controlsVisible = false
+                    interactionEpoch += 1
+                }
+                PlaybackOptionRow(Icons.Default.MoreVert, "播放信息") {
+                    showOptionsSheet = false
+                    onShowPlaybackInfo()
+                }
+            }
+        }
+    }
+
     if (showPlaylistSheet) {
         ModalBottomSheet(
             onDismissRequest = { showPlaylistSheet = false },
@@ -749,7 +814,7 @@ private fun FullscreenVideoPlaybackContent(
                     controller.play(it)
                     showPlaylistSheet = false
                 },
-                modifier = Modifier.fillMaxWidth().height(420.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(max = 560.dp).fillMaxHeight(0.8f),
             )
         }
     }
@@ -783,16 +848,23 @@ private fun FullscreenVideoPlaybackContent(
 @Composable
 private fun VideoViewport(
     controller: OpenListPlaybackController,
+    deviceControls: PlaybackDeviceControls?,
     playWhenReady: Boolean,
     @Player.State playbackState: Int,
     modifier: Modifier = Modifier,
     onTap: () -> Unit = {},
+    gesturesEnabled: Boolean = true,
     scaleMode: VideoScaleMode = VideoScaleMode.FIT,
     onInteractionActiveChange: (Boolean) -> Unit = {},
 ) {
     val player = controller.mediaController
+    val inPictureInPicture = rememberIsInPictureInPictureMode(LocalContext.current.findActivity())
+    val canUseGestures = gesturesEnabled && !inPictureInPicture
     var speedBeforeBoost by remember(player) { mutableStateOf<Float?>(null) }
     var gestureSeekPositionMs by remember(player) { mutableStateOf<Long?>(null) }
+    var adjustmentStartLevel by remember { mutableStateOf<Float?>(null) }
+    var adjustmentFeedback by remember { mutableStateOf<VideoAdjustmentFeedback?>(null) }
+    var adjustmentActive by remember { mutableStateOf(false) }
     val restoreSpeed = {
         speedBeforeBoost?.let { previousSpeed ->
             runCatching { controller.setPlaybackSpeed(previousSpeed) }
@@ -816,6 +888,19 @@ private fun VideoViewport(
             restoreSpeed()
         }
     }
+    LaunchedEffect(canUseGestures) {
+        if (!canUseGestures) {
+            restoreSpeed()
+            adjustmentFeedback = null
+            gestureSeekPositionMs = null
+        }
+    }
+    LaunchedEffect(adjustmentActive, adjustmentFeedback) {
+        if (!adjustmentActive && adjustmentFeedback != null) {
+            delay(800L)
+            adjustmentFeedback = null
+        }
+    }
 
     Box(
         modifier = modifier.background(Color.Black).clipToBounds(),
@@ -834,7 +919,8 @@ private fun VideoViewport(
         // Keep gesture handling in a regular Compose layer above the video surface.
         VideoGestureSurface(
             onTap = onTap,
-            canSeek = player::canSeekWithCurrentCommands,
+            gesturesEnabled = canUseGestures,
+            canSeek = { canUseGestures && player.canSeekWithCurrentCommands() },
             currentPositionMs = { player.currentPosition },
             durationMs = {
                 playbackDurationMs(
@@ -858,7 +944,7 @@ private fun VideoViewport(
             },
             onSpeedBoostStart = {
                 if (
-                    speedBeforeBoost != null ||
+                    !canUseGestures || speedBeforeBoost != null ||
                     !canStartLongPressSpeedBoost(
                         playWhenReady = player.playWhenReady,
                         playbackState = player.playbackState,
@@ -873,6 +959,22 @@ private fun VideoViewport(
                 }
             },
             onSpeedBoostEnd = restoreSpeed,
+            onVerticalAdjustmentStart = { target ->
+                restoreSpeed()
+                adjustmentActive = true
+                adjustmentStartLevel = deviceControls?.currentLevel(target)
+                adjustmentFeedback = VideoAdjustmentFeedback(target, adjustmentStartLevel)
+            },
+            onVerticalAdjustment = { target, delta ->
+                adjustmentStartLevel?.let { start ->
+                    val applied = deviceControls?.setLevel(target, (start + delta).coerceIn(0f, 1f))
+                    adjustmentFeedback = VideoAdjustmentFeedback(target, applied)
+                }
+            },
+            onVerticalAdjustmentEnd = {
+                adjustmentStartLevel = null
+                adjustmentActive = false
+            },
             onInteractionActiveChange = onInteractionActiveChange,
             modifier = Modifier.matchParentSize(),
         )
@@ -904,6 +1006,40 @@ private fun VideoViewport(
                 )
             }
         }
+        adjustmentFeedback?.takeIf { canUseGestures }?.let { feedback ->
+            VideoAdjustmentIndicator(feedback, Modifier.align(Alignment.Center))
+        }
+    }
+}
+
+internal data class VideoAdjustmentFeedback(val target: VideoAdjustment, val level: Float?)
+
+@Composable
+internal fun VideoAdjustmentIndicator(feedback: VideoAdjustmentFeedback, modifier: Modifier = Modifier) {
+    val brightness = feedback.target == VideoAdjustment.BRIGHTNESS
+    val label = if (brightness) "亮度" else "音量"
+    Surface(
+        modifier = modifier.testTag(PlaybackUiTags.VIDEO_ADJUSTMENT_FEEDBACK),
+        color = Color.Black.copy(alpha = 0.76f),
+        contentColor = Color.White,
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Row(
+            Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(
+                if (brightness) Icons.Default.BrightnessMedium else Icons.AutoMirrored.Filled.VolumeUp,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+            )
+            Text(
+                text = feedback.level?.let { "$label ${(it * 100).roundToInt()}%" }
+                    ?: "当前设备无法调节$label",
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
     }
 }
 
@@ -922,6 +1058,10 @@ internal fun VideoGestureSurface(
     onSpeedBoostEnd: () -> Unit,
     modifier: Modifier = Modifier,
     onInteractionActiveChange: (Boolean) -> Unit = {},
+    gesturesEnabled: Boolean = true,
+    onVerticalAdjustmentStart: (VideoAdjustment) -> Unit = {},
+    onVerticalAdjustment: (VideoAdjustment, Float) -> Unit = { _, _ -> },
+    onVerticalAdjustmentEnd: () -> Unit = {},
 ) {
     val currentOnTap by rememberUpdatedState(onTap)
     val currentCanSeek by rememberUpdatedState(canSeek)
@@ -934,6 +1074,9 @@ internal fun VideoGestureSurface(
     val currentSpeedBoostStart by rememberUpdatedState(onSpeedBoostStart)
     val currentSpeedBoostEnd by rememberUpdatedState(onSpeedBoostEnd)
     val currentInteractionActiveChange by rememberUpdatedState(onInteractionActiveChange)
+    val currentVerticalAdjustmentStart by rememberUpdatedState(onVerticalAdjustmentStart)
+    val currentVerticalAdjustment by rememberUpdatedState(onVerticalAdjustment)
+    val currentVerticalAdjustmentEnd by rememberUpdatedState(onVerticalAdjustmentEnd)
     val horizontalSeekPixelsPerSecond = with(LocalDensity.current) {
         VIDEO_HORIZONTAL_SEEK_DP_PER_SECOND.dp.toPx()
     }
@@ -959,11 +1102,11 @@ internal fun VideoGestureSurface(
                     }
                 }
             }
-            .pointerInput(Unit) {
+            .pointerInput(gesturesEnabled) {
                 detectTapGestures(
                     onTap = { currentOnTap() },
                     onDoubleTap = { tapPosition ->
-                        if (!currentCanSeek()) {
+                        if (!gesturesEnabled || !currentCanSeek()) {
                             return@detectTapGestures
                         } else if (tapPosition.x < size.width / 2f) {
                             currentSeekBack()
@@ -972,7 +1115,7 @@ internal fun VideoGestureSurface(
                         }
                     },
                     onLongPress = {
-                        speedBoostActive = currentSpeedBoostStart()
+                        speedBoostActive = gesturesEnabled && currentSpeedBoostStart()
                     },
                     onPress = {
                         try {
@@ -986,67 +1129,72 @@ internal fun VideoGestureSurface(
                     },
                 )
             }
-            .pointerInput(horizontalSeekPixelsPerSecond) {
-                var pendingSeekPositionMs: Long? = null
-                var dragStartPositionMs: Long? = null
-                var dragDurationMs: Long? = null
-                var accumulatedDragPx = 0f
-                detectHorizontalDragGestures(
-                    onDragStart = {
-                        if (speedBoostActive) {
-                            currentSpeedBoostEnd()
-                            speedBoostActive = false
-                        }
-                        val durationMs = currentDurationMs()
-                        dragStartPositionMs = if (currentCanSeek() && durationMs != null) {
-                            currentPositionMsProvider()
-                        } else {
-                            null
-                        }
-                        dragDurationMs = durationMs.takeIf { dragStartPositionMs != null }
-                        accumulatedDragPx = 0f
-                        pendingSeekPositionMs = dragStartPositionMs?.let { startPositionMs ->
-                            horizontalSeekTarget(
-                                startPositionMs = startPositionMs,
-                                dragDeltaPx = accumulatedDragPx,
-                                pixelsPerSecond = horizontalSeekPixelsPerSecond,
-                                durationMs = dragDurationMs,
-                            )
-                        }
-                        currentHorizontalSeekPreview(pendingSeekPositionMs)
-                    },
-                    onHorizontalDrag = { change, dragAmount ->
+            .pointerInput(horizontalSeekPixelsPerSecond, gesturesEnabled) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    if (!gesturesEnabled) return@awaitEachGesture
+                    var overSlop = Offset.Zero
+                    val dragStart = awaitTouchSlopOrCancellation(down.id) { change, over ->
                         change.consume()
-                        accumulatedDragPx += dragAmount
-                        pendingSeekPositionMs = dragStartPositionMs?.let { startPositionMs ->
-                            horizontalSeekTarget(
-                                startPositionMs = startPositionMs,
-                                dragDeltaPx = accumulatedDragPx,
-                                pixelsPerSecond = horizontalSeekPixelsPerSecond,
-                                durationMs = dragDurationMs,
-                            )
+                        overSlop = over
+                    } ?: return@awaitEachGesture
+                    val movement = dragStart.position - down.position
+                    val vertical = abs(movement.y) > abs(movement.x)
+                    // Keep both direction and side fixed for this pointer sequence, even if the
+                    // finger later crosses the centre or moves diagonally.
+                    val target = if (down.position.x < size.width / 2f) {
+                        VideoAdjustment.BRIGHTNESS
+                    } else {
+                        VideoAdjustment.VOLUME
+                    }
+                    if (speedBoostActive) {
+                        currentSpeedBoostEnd()
+                        speedBoostActive = false
+                    }
+                    val duration = if (!vertical && currentCanSeek()) currentDurationMs() else null
+                    val seekStart = if (duration != null) currentPositionMsProvider() else null
+                    var accumulatedDrag = overSlop
+                    var pendingSeek: Long? = null
+                    var completed = false
+                    var pointerId = dragStart.id
+                    try {
+                        if (vertical) currentVerticalAdjustmentStart(target)
+                        while (true) {
+                            if (vertical) {
+                                currentVerticalAdjustment(
+                                    target,
+                                    -accumulatedDrag.y / (size.height.coerceAtLeast(1) * 0.75f),
+                                )
+                            } else if (seekStart != null) {
+                                pendingSeek = horizontalSeekTarget(
+                                    startPositionMs = seekStart,
+                                    dragDeltaPx = accumulatedDrag.x,
+                                    pixelsPerSecond = horizontalSeekPixelsPerSecond,
+                                    durationMs = duration,
+                                )
+                                currentHorizontalSeekPreview(pendingSeek)
+                            }
+                            val change = awaitDragOrCancellation(pointerId) ?: break
+                            if (!change.pressed) {
+                                change.consume()
+                                completed = true
+                                break
+                            }
+                            accumulatedDrag += change.positionChange()
+                            change.consume()
+                            pointerId = change.id
                         }
-                        currentHorizontalSeekPreview(pendingSeekPositionMs)
-                    },
-                    onDragEnd = {
-                        val targetMs = pendingSeekPositionMs
-                        pendingSeekPositionMs = null
-                        dragStartPositionMs = null
-                        dragDurationMs = null
-                        accumulatedDragPx = 0f
-                        currentHorizontalSeekPreview(null)
-                        if (targetMs != null && currentCanSeek()) {
-                            currentHorizontalSeek(targetMs)
+                    } finally {
+                        if (vertical) {
+                            currentVerticalAdjustmentEnd()
+                        } else {
+                            currentHorizontalSeekPreview(null)
                         }
-                    },
-                    onDragCancel = {
-                        pendingSeekPositionMs = null
-                        dragStartPositionMs = null
-                        dragDurationMs = null
-                        accumulatedDragPx = 0f
-                        currentHorizontalSeekPreview(null)
-                    },
-                )
+                    }
+                    if (completed && !vertical && currentCanSeek()) {
+                        pendingSeek?.let { currentHorizontalSeek(it) }
+                    }
+                }
             },
     )
 }
@@ -1106,7 +1254,8 @@ internal fun VideoScaleToggleButton(
         onClick = onToggle,
         modifier = modifier
             .testTag(PlaybackUiTags.VIDEO_ZOOM_TOGGLE)
-            .background(Color.Black.copy(alpha = 0.62f), CircleShape),
+            .size(48.dp)
+            .background(OpenListMediaColors.controlScrim, CircleShape),
     ) {
         Icon(
             imageVector = if (isZoomed) Icons.Default.ZoomOut else Icons.Default.ZoomIn,
@@ -1124,7 +1273,7 @@ internal fun FullscreenToggleButton(
 ) {
     IconButton(
         onClick = onToggle,
-        modifier = modifier.background(Color.Black.copy(alpha = 0.62f), CircleShape),
+        modifier = modifier.size(48.dp).background(OpenListMediaColors.controlScrim, CircleShape),
     ) {
         Icon(
             imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
@@ -1144,63 +1293,20 @@ private fun PlaybackChromeIconButton(
 ) {
     IconButton(
         onClick = onClick,
-        modifier = modifier.background(Color.Black.copy(alpha = 0.62f), CircleShape),
+        modifier = modifier.size(48.dp).background(OpenListMediaColors.controlScrim, CircleShape),
     ) {
         Icon(icon, contentDescription = contentDescription, tint = Color.White)
     }
 }
 
-/** Overflow menu for the fullscreen top bar. Holds playback info today and is easy to extend. */
 @Composable
-private fun FullscreenMoreMenu(
-    onShowPlaybackInfo: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Box(modifier) {
-        PlaybackChromeIconButton(
-            icon = Icons.Default.MoreVert,
-            contentDescription = "更多",
-            onClick = { expanded = true },
-        )
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(
-                text = { Text("播放信息") },
-                onClick = {
-                    expanded = false
-                    onShowPlaybackInfo()
-                },
-            )
-        }
-    }
-}
-
-/** Vertical +/- speed stepper for the fullscreen right edge, showing the current rate. */
-@Composable
-private fun FullscreenSpeedStepper(
-    speed: Float,
-    enabled: Boolean,
-    onStep: (increase: Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier
-            .background(Color.Black.copy(alpha = 0.62f), CircleShape)
-            .padding(vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        IconButton(onClick = { onStep(true) }, enabled = enabled) {
-            Icon(Icons.Default.Add, contentDescription = "加快播放速度", tint = Color.White)
-        }
-        Text(
-            text = formatPlaybackSpeed(speed),
-            color = Color.White,
-            style = MaterialTheme.typography.labelLarge,
-        )
-        IconButton(onClick = { onStep(false) }, enabled = enabled) {
-            Icon(Icons.Default.Remove, contentDescription = "减慢播放速度", tint = Color.White)
-        }
-    }
+private fun PlaybackOptionRow(icon: ImageVector, title: String, onClick: () -> Unit) {
+    ListItem(
+        headlineContent = { Text(title) },
+        leadingContent = { Icon(icon, contentDescription = null) },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier.clickable(onClick = onClick).heightIn(min = 56.dp),
+    )
 }
 
 /**
@@ -1225,7 +1331,7 @@ private fun TrackSelectionSheet(
         (0 until group.length).any { group.isTrackSelected(it) }
     }
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
             Text(
                 text = title,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
@@ -1321,8 +1427,8 @@ internal fun VideoQueueList(
             .testTag(PlaybackUiTags.VIDEO_QUEUE_CONTAINER),
     ) {
         Text(
-            text = "同目录视频",
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            text = "播放队列 · ${queue.size}",
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp).semantics { heading() },
             color = chrome.pageContent,
             style = MaterialTheme.typography.titleSmall,
         )
@@ -1340,12 +1446,12 @@ internal fun VideoQueueList(
                 val selected = index == currentIndex
                 ListItem(
                     headlineContent = {
-                        Text(item.displayTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(item.displayTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     },
                     supportingContent = {
                         Text(
-                            text = if (selected && isPlaying) {
-                                "正在播放"
+                            text = if (selected) {
+                                if (isPlaying) "正在播放" else "当前项目"
                             } else {
                                 "${index + 1} / ${queue.size}"
                             },
@@ -1380,7 +1486,7 @@ internal fun VideoQueueList(
                             chrome.secondaryContent
                         },
                     ),
-                    modifier = Modifier.clickable { onSelect(index) },
+                    modifier = Modifier.semantics { this.selected = selected }.clickable { onSelect(index) },
                 )
             }
         }
@@ -1395,7 +1501,6 @@ private fun AudioPlaybackContent(
     errorMessage: String?,
     modifier: Modifier,
 ) {
-    val chrome = playbackChromePalette(MaterialTheme.colorScheme)
     val player = controller.mediaController
     val progress = rememberProgressStateWithTickInterval(player, PLAYBACK_PROGRESS_TICK_MS)
     val durationMs = playbackDurationMs(progress.durationMs, player.duration, player.contentDuration)
@@ -1406,7 +1511,6 @@ private fun AudioPlaybackContent(
         mutableStateOf<Long?>(null)
     }
     val displayedPositionMs = scrubPositionMs ?: pendingSeekPositionMs ?: progress.currentPositionMs
-    var showPlaylistSheet by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(pendingSeekPositionMs, progress.currentPositionMs) {
         val pending = pendingSeekPositionMs ?: return@LaunchedEffect
@@ -1420,152 +1524,209 @@ private fun AudioPlaybackContent(
         if (pendingSeekPositionMs == pending) pendingSeekPositionMs = null
     }
 
-    val remainingMs = durationMs?.let { (it - displayedPositionMs).coerceAtLeast(0L) }
-
-    Column(
-        modifier = modifier
-            .background(chrome.pageContainer)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            modifier = Modifier
-                .padding(top = 8.dp)
-                .size(280.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Default.MusicNote,
-                contentDescription = null,
-                modifier = Modifier.size(112.dp),
-                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
-            if (state.playbackState == Player.STATE_BUFFERING) {
-                CircularProgressIndicator(Modifier.size(56.dp))
-            }
-        }
-        Spacer(Modifier.height(24.dp))
-        Column(Modifier.fillMaxWidth()) {
-            Text(
-                text = state.currentItem?.displayTitle.orEmpty(),
-                style = MaterialTheme.typography.headlineSmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = "第 ${state.currentIndex + 1} / ${state.queue.size} 项",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-        errorMessage?.let {
-            Spacer(Modifier.height(12.dp))
-            PlaybackError(it, onVideoSurface = false)
-        }
-        Spacer(Modifier.height(12.dp))
-        SeekablePlaybackSlider(
-            currentPositionMs = displayedPositionMs,
-            durationMs = durationMs,
-            enabled = canSeekNow,
-            mediaItemKey = currentMediaId,
-            onScrub = {
+    AudioPlaybackPresentation(
+        state = state.copy(canSeek = canSeekNow),
+        positionMs = displayedPositionMs,
+        durationMs = durationMs,
+        errorMessage = errorMessage,
+        onScrub = {
+            pendingSeekPositionMs = null
+            scrubPositionMs = it
+        },
+        onSeek = { positionMs ->
+            scrubPositionMs = null
+            if (player.canSeekWithCurrentCommands()) {
+                pendingSeekPositionMs = positionMs
+                controller.seekTo(positionMs)
+            } else {
                 pendingSeekPositionMs = null
-                scrubPositionMs = it
-            },
-            onSeek = { positionMs ->
-                scrubPositionMs = null
-                if (player.canSeekWithCurrentCommands()) {
-                    pendingSeekPositionMs = positionMs
-                    controller.seekTo(positionMs)
-                } else {
-                    pendingSeekPositionMs = null
-                }
-            },
-            onVideoSurface = false,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = formatDuration(displayedPositionMs),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelMedium,
-            )
-            Text(
-                text = remainingMs?.let { "-${formatDuration(it)}" }
-                    ?: formatDuration(durationMs ?: C.TIME_UNSET),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelMedium,
-            )
-        }
-        Spacer(Modifier.height(16.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(
-                onClick = controller::skipToPrevious,
-                enabled = state.currentIndex > 0,
-                modifier = Modifier.size(56.dp),
-            ) {
-                Icon(
-                    Icons.Default.SkipPrevious,
-                    contentDescription = "上一首",
-                    modifier = Modifier.size(36.dp),
-                )
             }
-            FilledIconButton(
-                onClick = {
-                    when {
-                        state.isPlaying -> controller.pause()
-                        state.playbackState == Player.STATE_ENDED -> {
-                            controller.seekTo(0L)
-                            controller.play()
+        },
+        onToggle = {
+            performPlaybackToggle(
+                playWhenReady = player.playWhenReady,
+                playbackState = player.playbackState,
+                pause = controller::pause,
+                seekToStart = { controller.seekTo(0L) },
+                play = controller::play,
+            )
+        },
+        onPrevious = controller::skipToPrevious,
+        onNext = controller::skipToNext,
+        onSelect = controller::play,
+        modifier = modifier,
+    )
+}
+
+/** Renders a session snapshot without connecting to or owning a player. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun AudioPlaybackPresentation(
+    state: PlaybackControllerState,
+    positionMs: Long,
+    durationMs: Long?,
+    errorMessage: String?,
+    onScrub: (Long) -> Unit,
+    onSeek: (Long) -> Unit,
+    onToggle: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val chrome = playbackChromePalette(MaterialTheme.colorScheme)
+    var showPlaylistSheet by rememberSaveable { mutableStateOf(false) }
+    val remainingMs = durationMs?.let { (it - positionMs).coerceAtLeast(0L) }
+
+    BoxWithConstraints(modifier.background(chrome.pageContainer)) {
+        val wide = maxWidth >= 840.dp && LocalDensity.current.fontScale < 1.5f
+        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            Box(Modifier.weight(1.7f).fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 600.dp)
+                        .fillMaxSize()
+                        .background(chrome.pageContainer)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 24.dp, vertical = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .widthIn(max = 264.dp)
+                            .fillMaxWidth()
+                            .aspectRatio(1f)
+                            .clip(MaterialTheme.shapes.extraLarge)
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MusicNote,
+                            contentDescription = null,
+                            modifier = Modifier.size(112.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        if (state.playbackState == Player.STATE_BUFFERING) {
+                            CircularProgressIndicator(Modifier.size(56.dp))
                         }
-                        else -> controller.play()
                     }
-                },
-                modifier = Modifier.size(76.dp),
-            ) {
-                Icon(
-                    imageVector = when {
-                        state.isPlaying -> Icons.Default.Pause
-                        state.playbackState == Player.STATE_ENDED -> Icons.Default.Replay
-                        else -> Icons.Default.PlayArrow
-                    },
-                    contentDescription = when {
-                        state.isPlaying -> "暂停"
-                        state.playbackState == Player.STATE_ENDED -> "重新播放"
-                        else -> "播放"
-                    },
-                    modifier = Modifier.size(40.dp),
-                )
+                    Spacer(Modifier.height(24.dp))
+                    Column(Modifier.fillMaxWidth()) {
+                        Text(
+                            text = state.currentItem?.displayTitle.orEmpty(),
+                            style = MaterialTheme.typography.headlineSmall,
+                            modifier = Modifier.semantics { heading() },
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = "${state.currentIndex + 1} / ${state.queue.size} · " + when {
+                                state.playbackState == Player.STATE_BUFFERING -> "正在缓冲"
+                                state.isPlaying -> "正在播放"
+                                state.playbackState == Player.STATE_ENDED -> "已播完"
+                                state.playbackState == Player.STATE_IDLE -> "待播放"
+                                else -> "已暂停"
+                            },
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    errorMessage?.let {
+                        Spacer(Modifier.height(12.dp))
+                        PlaybackError(it, onVideoSurface = false)
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    SeekablePlaybackSlider(
+                        currentPositionMs = positionMs,
+                        durationMs = durationMs,
+                        enabled = state.canSeek,
+                        mediaItemKey = state.currentItem?.mediaId,
+                        onScrub = onScrub,
+                        onSeek = onSeek,
+                        onVideoSurface = false,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = formatDuration(positionMs),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        Text(
+                            text = remainingMs?.let { "-${formatDuration(it)}" }
+                                ?: formatDuration(durationMs ?: C.TIME_UNSET),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconButton(
+                            onClick = onPrevious,
+                            enabled = state.currentIndex > 0,
+                            modifier = Modifier.size(56.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.SkipPrevious,
+                                contentDescription = "上一首",
+                                modifier = Modifier.size(36.dp),
+                            )
+                        }
+                        FilledIconButton(
+                            onClick = onToggle,
+                            modifier = Modifier.size(76.dp),
+                        ) {
+                            Icon(
+                                imageVector = when {
+                                    playbackShowsPause(state.playWhenReady, state.playbackState) -> Icons.Default.Pause
+                                    state.playbackState == Player.STATE_ENDED -> Icons.Default.Replay
+                                    else -> Icons.Default.PlayArrow
+                                },
+                                contentDescription = when {
+                                    playbackShowsPause(state.playWhenReady, state.playbackState) -> "暂停"
+                                    state.playbackState == Player.STATE_ENDED -> "重新播放"
+                                    else -> "播放"
+                                },
+                                modifier = Modifier.size(40.dp),
+                            )
+                        }
+                        IconButton(
+                            onClick = onNext,
+                            enabled = state.currentIndex in 0 until state.queue.lastIndex,
+                            modifier = Modifier.size(56.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.SkipNext,
+                                contentDescription = "下一首",
+                                modifier = Modifier.size(36.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    if (!wide) {
+                        TextButton(onClick = { showPlaylistSheet = true }, modifier = Modifier.heightIn(min = 48.dp)) {
+                            Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null)
+                            Text("播放队列 · ${state.queue.size}", modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
+                }
             }
-            IconButton(
-                onClick = controller::skipToNext,
-                enabled = state.currentIndex in 0 until state.queue.lastIndex,
-                modifier = Modifier.size(56.dp),
-            ) {
-                Icon(
-                    Icons.Default.SkipNext,
-                    contentDescription = "下一首",
-                    modifier = Modifier.size(36.dp),
+            if (wide) {
+                AudioQueueList(
+                    queue = state.queue,
+                    currentIndex = state.currentIndex,
+                    isPlaying = state.isPlaying,
+                    onSelect = onSelect,
+                    modifier = Modifier.weight(1f).fillMaxSize(),
                 )
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-        ) {
-            IconButton(onClick = { showPlaylistSheet = true }) {
-                Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "播放列表")
             }
         }
     }
@@ -1580,10 +1741,10 @@ private fun AudioPlaybackContent(
                 currentIndex = state.currentIndex,
                 isPlaying = state.isPlaying,
                 onSelect = {
-                    controller.play(it)
+                    onSelect(it)
                     showPlaylistSheet = false
                 },
-                modifier = Modifier.fillMaxWidth().height(420.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(max = 560.dp).fillMaxHeight(0.8f),
             )
         }
     }
@@ -1597,6 +1758,7 @@ private fun AudioQueueList(
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val colors = MaterialTheme.colorScheme
     LazyColumn(modifier) {
         item {
             Text(
@@ -1612,11 +1774,15 @@ private fun AudioQueueList(
             val selected = index == currentIndex
             ListItem(
                 headlineContent = {
-                    Text(item.displayTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(item.displayTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 },
                 supportingContent = {
                     Text(
-                        text = if (selected && isPlaying) "正在播放" else "第 ${index + 1} 项",
+                        text = if (selected) {
+                            if (isPlaying) "正在播放" else "当前项目"
+                        } else {
+                            "第 ${index + 1} 项"
+                        },
                         maxLines = 1,
                     )
                 },
@@ -1624,17 +1790,19 @@ private fun AudioQueueList(
                     Icon(
                         imageVector = if (selected && isPlaying) Icons.Default.PlayArrow else Icons.Default.MusicNote,
                         contentDescription = null,
-                        tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 },
                 colors = ListItemDefaults.colors(
                     containerColor = if (selected) {
-                        MaterialTheme.colorScheme.secondaryContainer
+                        colors.secondaryContainer
                     } else {
                         Color.Transparent
                     },
+                    headlineColor = if (selected) colors.onSecondaryContainer else colors.onSurface,
+                    supportingColor = if (selected) colors.onSecondaryContainer else colors.onSurfaceVariant,
+                    leadingIconColor = if (selected) colors.onSecondaryContainer else colors.onSurfaceVariant,
                 ),
-                modifier = Modifier.clickable { onSelect(index) },
+                modifier = Modifier.semantics { this.selected = selected }.clickable { onSelect(index) },
             )
         }
     }
@@ -1738,25 +1906,24 @@ private fun FullscreenBottomBar(
                 }
                 FilledIconButton(
                     onClick = {
-                        when {
-                            state.isPlaying -> controller.pause()
-                            state.playbackState == Player.STATE_ENDED -> {
-                                controller.seekTo(0L)
-                                controller.play()
-                            }
-                            else -> controller.play()
-                        }
+                        performPlaybackToggle(
+                            playWhenReady = player.playWhenReady,
+                            playbackState = player.playbackState,
+                            pause = controller::pause,
+                            seekToStart = { controller.seekTo(0L) },
+                            play = controller::play,
+                        )
                     },
                     colors = playPauseColors,
                 ) {
                     Icon(
                         imageVector = when {
-                            state.isPlaying -> Icons.Default.Pause
+                            playbackShowsPause(state.playWhenReady, state.playbackState) -> Icons.Default.Pause
                             state.playbackState == Player.STATE_ENDED -> Icons.Default.Replay
                             else -> Icons.Default.PlayArrow
                         },
                         contentDescription = when {
-                            state.isPlaying -> "暂停"
+                            playbackShowsPause(state.playWhenReady, state.playbackState) -> "暂停"
                             state.playbackState == Player.STATE_ENDED -> "重新播放"
                             else -> "播放"
                         },
@@ -1791,8 +1958,6 @@ private fun PlaybackControls(
     state: PlaybackControllerState,
     onVideoSurface: Boolean,
     modifier: Modifier,
-    showSpeedButton: Boolean = true,
-    showTransportRow: Boolean = true,
 ) {
     val player = controller.mediaController
     val progress = rememberProgressStateWithTickInterval(
@@ -1854,131 +2019,107 @@ private fun PlaybackControls(
     }
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        // Primary bar (reference layout): play anchors the left, and the current/total time
-        // labels sit inline on either side of the scrubber that fills the remaining width.
+        SeekablePlaybackSlider(
+            currentPositionMs = displayedPositionMs,
+            durationMs = durationMs,
+            enabled = canSeekNow,
+            mediaItemKey = currentMediaId,
+            onScrub = {
+                pendingSeekPositionMs = null
+                scrubPositionMs = it
+            },
+            onSeek = { positionMs ->
+                scrubPositionMs = null
+                if (player.canSeekWithCurrentCommands()) {
+                    pendingSeekPositionMs = positionMs
+                    controller.seekTo(positionMs)
+                } else {
+                    pendingSeekPositionMs = null
+                }
+            },
+            onVideoSurface = onVideoSurface,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(formatDuration(displayedPositionMs), color = secondary, style = MaterialTheme.typography.labelMedium)
+            Text(formatDuration(durationMs ?: C.TIME_UNSET), color = secondary, style = MaterialTheme.typography.labelMedium)
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            IconButton(
+                onClick = controller::skipToPrevious,
+                enabled = state.currentIndex > 0,
+                modifier = Modifier.size(48.dp),
+                colors = transportButtonColors,
+            ) {
+                Icon(Icons.Default.SkipPrevious, contentDescription = "上一个")
+            }
+            IconButton(
+                onClick = { if (player.canSeekWithCurrentCommands()) controller.seekBack() },
+                enabled = canSeekNow,
+                modifier = Modifier.size(48.dp),
+                colors = transportButtonColors,
+            ) {
+                Icon(Icons.Default.Replay10, contentDescription = "后退 10 秒")
+            }
             FilledIconButton(
                 onClick = {
-                    when {
-                        state.isPlaying -> controller.pause()
-                        state.playbackState == Player.STATE_ENDED -> {
-                            controller.seekTo(0L)
-                            controller.play()
-                        }
-                        else -> controller.play()
-                    }
+                    performPlaybackToggle(
+                        playWhenReady = player.playWhenReady,
+                        playbackState = player.playbackState,
+                        pause = controller::pause,
+                        seekToStart = { controller.seekTo(0L) },
+                        play = controller::play,
+                    )
                 },
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier.size(56.dp),
                 colors = playPauseButtonColors,
             ) {
                 Icon(
                     imageVector = when {
-                        state.isPlaying -> Icons.Default.Pause
+                        playbackShowsPause(state.playWhenReady, state.playbackState) -> Icons.Default.Pause
                         state.playbackState == Player.STATE_ENDED -> Icons.Default.Replay
                         else -> Icons.Default.PlayArrow
                     },
                     contentDescription = when {
-                        state.isPlaying -> "暂停"
+                        playbackShowsPause(state.playWhenReady, state.playbackState) -> "暂停"
                         state.playbackState == Player.STATE_ENDED -> "重新播放"
                         else -> "播放"
                     },
-                    modifier = Modifier.size(28.dp),
+                    modifier = Modifier.size(32.dp),
                 )
             }
-            Text(
-                text = formatDuration(displayedPositionMs),
-                color = secondary,
-                style = MaterialTheme.typography.labelMedium,
-            )
-            SeekablePlaybackSlider(
-                currentPositionMs = displayedPositionMs,
-                durationMs = durationMs,
+            IconButton(
+                onClick = { if (player.canSeekWithCurrentCommands()) controller.seekForward() },
                 enabled = canSeekNow,
-                mediaItemKey = currentMediaId,
-                onScrub = {
-                    pendingSeekPositionMs = null
-                    scrubPositionMs = it
-                },
-                onSeek = { positionMs ->
-                    scrubPositionMs = null
-                    if (player.canSeekWithCurrentCommands()) {
-                        pendingSeekPositionMs = positionMs
-                        controller.seekTo(positionMs)
-                    } else {
-                        pendingSeekPositionMs = null
-                    }
-                },
-                onVideoSurface = onVideoSurface,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = formatDuration(durationMs ?: C.TIME_UNSET),
-                color = secondary,
-                style = MaterialTheme.typography.labelMedium,
-            )
-        }
-        // Secondary transport: queue navigation, 10-second seek, and the speed cycle, kept
-        // together and centered beneath the scrubber. Hidden on the minimal inline video overlay.
-        if (showTransportRow) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
-                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.size(48.dp),
+                colors = transportButtonColors,
             ) {
-                IconButton(
-                    onClick = controller::skipToPrevious,
-                    enabled = state.currentIndex > 0,
-                    colors = transportButtonColors,
-                ) {
-                    Icon(Icons.Default.SkipPrevious, contentDescription = "上一个")
-                }
-                IconButton(
-                    onClick = {
-                        if (player.canSeekWithCurrentCommands()) controller.seekBack()
-                    },
-                    enabled = canSeekNow,
-                    colors = transportButtonColors,
-                ) {
-                    Icon(Icons.Default.Replay10, contentDescription = "后退 10 秒")
-                }
-                IconButton(
-                    onClick = {
-                        if (player.canSeekWithCurrentCommands()) controller.seekForward()
-                    },
-                    enabled = canSeekNow,
-                    colors = transportButtonColors,
-                ) {
-                    Icon(Icons.Default.Forward10, contentDescription = "前进 10 秒")
-                }
-                if (showSpeedButton) {
-                    IconButton(
-                        onClick = {
-                            if (player.isCommandAvailable(Player.COMMAND_SET_SPEED_AND_PITCH)) {
-                                controller.setPlaybackSpeed(nextPlaybackSpeed(player.playbackParameters.speed))
-                            }
-                        },
-                        enabled = canChangeSpeedNow,
-                        modifier = Modifier.testTag(PlaybackUiTags.PLAYBACK_SPEED),
-                        colors = transportButtonColors,
-                    ) {
-                        Text(
-                            text = formatPlaybackSpeed(state.playbackSpeed),
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                    }
-                }
-                IconButton(
-                    onClick = controller::skipToNext,
-                    enabled = state.currentIndex in 0 until state.queue.lastIndex,
-                    colors = transportButtonColors,
-                ) {
-                    Icon(Icons.Default.SkipNext, contentDescription = "下一个")
-                }
+                Icon(Icons.Default.Forward10, contentDescription = "前进 10 秒")
             }
+            IconButton(
+                onClick = controller::skipToNext,
+                enabled = state.currentIndex in 0 until state.queue.lastIndex,
+                modifier = Modifier.size(48.dp),
+                colors = transportButtonColors,
+            ) {
+                Icon(Icons.Default.SkipNext, contentDescription = "下一个")
+            }
+        }
+        TextButton(
+            onClick = {
+                if (player.isCommandAvailable(Player.COMMAND_SET_SPEED_AND_PITCH)) {
+                    controller.setPlaybackSpeed(nextPlaybackSpeed(player.playbackParameters.speed))
+                }
+            },
+            enabled = canChangeSpeedNow,
+            modifier = Modifier.align(Alignment.CenterHorizontally).heightIn(min = 48.dp)
+                .testTag(PlaybackUiTags.PLAYBACK_SPEED),
+        ) {
+            Text("播放速度 ${formatPlaybackSpeed(state.playbackSpeed)}")
         }
     }
 }
@@ -2184,18 +2325,17 @@ private fun EmptyPlaybackState(modifier: Modifier, onDismiss: () -> Unit) {
     }
 }
 
-private val MediaItem.isVideo: Boolean
+internal val MediaItem.isVideo: Boolean
     get() = mediaMetadata.mediaType == MediaMetadata.MEDIA_TYPE_VIDEO ||
         localConfiguration?.mimeType?.startsWith("video/") == true
 
 private val MediaItem.displayTitle: String
-    get() = mediaMetadata.title?.toString()
-        ?.takeIf(String::isNotBlank)
+    get() = mediaMetadata.title?.toString()?.takeIf(String::isNotBlank)
         ?: mediaMetadata.displayTitle?.toString()?.takeIf(String::isNotBlank)
         ?: "未知媒体"
 
 private fun formatDuration(valueMs: Long): String {
-    val safeMs = valueMs.takeUnless { it == C.TIME_UNSET || it < 0L } ?: 0L
+    val safeMs = valueMs.takeUnless { it == C.TIME_UNSET || it < 0L } ?: return "--:--"
     val totalSeconds = safeMs / 1_000L
     val seconds = totalSeconds % 60L
     val totalMinutes = totalSeconds / 60L
@@ -2205,6 +2345,26 @@ private fun formatDuration(valueMs: Long): String {
         "%d:%02d:%02d".format(hours, minutes, seconds)
     } else {
         "%d:%02d".format(minutes, seconds)
+    }
+}
+
+/** Buffering still has an active play intent, so its primary action must be pause. */
+internal fun playbackShowsPause(playWhenReady: Boolean, @Player.State playbackState: Int): Boolean =
+    playWhenReady && (playbackState == Player.STATE_READY || playbackState == Player.STATE_BUFFERING)
+
+/** [play] must also prepare idle media, as [OpenListPlaybackController.play] does. */
+internal fun performPlaybackToggle(
+    playWhenReady: Boolean,
+    @Player.State playbackState: Int,
+    pause: () -> Unit,
+    seekToStart: () -> Unit,
+    play: () -> Unit,
+) {
+    if (playbackShowsPause(playWhenReady, playbackState)) {
+        pause()
+    } else {
+        if (playbackState == Player.STATE_ENDED) seekToStart()
+        play()
     }
 }
 

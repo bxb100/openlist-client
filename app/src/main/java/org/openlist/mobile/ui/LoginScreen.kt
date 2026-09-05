@@ -1,42 +1,47 @@
 package org.openlist.mobile.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,29 +51,36 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.openlist.mobile.AppContainer
+import org.openlist.mobile.R
 import org.openlist.mobile.core.model.ServerProfile
 import org.openlist.mobile.core.network.LocalNetworkAddress
 import org.openlist.mobile.core.network.LocalNetworkPermissionController
 import org.openlist.mobile.data.repository.SecondFactorRequiredException
+import org.openlist.mobile.ui.account.ConnectionEndpointFields
+import org.openlist.mobile.ui.account.ConnectionOptionsDialog
+import org.openlist.mobile.ui.theme.OpenListTheme
 
 internal enum class LoginStep { Credentials, TwoFactor }
 
@@ -76,6 +88,7 @@ internal object LoginUiTags {
     const val HOST = "login_host"
     const val USERNAME = "login_username"
     const val PASSWORD = "login_password"
+    const val SAVE_PASSWORD = "login_save_password"
     const val SUBMIT = "login_submit"
     const val SWITCH_ACCOUNT = "login_switch_account"
     const val SETTINGS = "login_settings"
@@ -91,6 +104,7 @@ internal object LoginUiTags {
 private class PendingLogin(
     val profile: ServerProfile,
     val password: String,
+    val savePassword: Boolean,
 ) {
     override fun toString(): String = "PendingLogin(profile=$profile, password=<redacted>)"
 }
@@ -109,17 +123,17 @@ internal fun LoginScreen(
     var basePath by rememberSaveable { mutableStateOf(initialEndpoint.basePath) }
     var username by rememberSaveable { mutableStateOf(saved.server.username) }
     // Credentials and the challenge must never enter Android's saved-instance-state Bundle.
-    var password by remember { mutableStateOf("") }
     var otp by remember { mutableStateOf("") }
     var pendingLogin by remember { mutableStateOf<PendingLogin?>(null) }
     var step by remember { mutableStateOf(LoginStep.Credentials) }
     var showPassword by remember { mutableStateOf(false) }
+    var changingPasswordPreference by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val permissionController = LocalContext.current as? LocalNetworkPermissionController
     val persistedAuthenticationError by container.authenticationError.collectAsStateWithLifecycle()
-    val loading = submitting || authenticating
+    val loading = submitting || authenticating || changingPasswordPreference
     val endpoint = LoginEndpointDraft(
         host = host,
         protocol = runCatching { LoginProtocol.valueOf(protocolName) }
@@ -134,6 +148,31 @@ internal fun LoginScreen(
         endpoint.serverProfile(username).normalizedBaseUrl()
     }.exceptionOrNull()?.message
     val displayedError = error ?: persistedAuthenticationError
+    val credentialIdentity = proposedProfile?.let { it.normalizedBaseUrl() to it.username }
+    var password by remember(credentialIdentity) { mutableStateOf("") }
+    var savePassword by remember(credentialIdentity) { mutableStateOf(false) }
+    var passwordEditRevision by remember(credentialIdentity) { mutableStateOf(0) }
+    var savePreferenceEditRevision by remember(credentialIdentity) { mutableStateOf(0) }
+
+    LaunchedEffect(credentialIdentity) {
+        if (submitting || pendingLogin != null) return@LaunchedEffect
+        val profile = proposedProfile ?: return@LaunchedEffect
+        val revision = passwordEditRevision
+        val preferenceRevision = savePreferenceEditRevision
+        try {
+            val credential = container.savedLoginCredential(profile)
+            // Loading a saved credential must never replace text or a preference the user has
+            // already edited while disk/Keystore access was in flight.
+            if (!submitting && pendingLogin == null) {
+                if (revision == passwordEditRevision) password = credential?.password.orEmpty()
+                if (preferenceRevision == savePreferenceEditRevision) savePassword = credential != null
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            if (revision == passwordEditRevision) error = "无法读取本机保存的密码，请重新输入"
+        }
+    }
 
     LaunchedEffect(saved.server.baseUrl, saved.server.username) {
         // beginLogin() persists/activates the target before the request. Do not let that expected
@@ -169,13 +208,13 @@ internal fun LoginScreen(
     }
 
     fun performLogin(target: PendingLogin, otpCode: String) {
-        if (loading) return
+        if (submitting || authenticating || changingPasswordPreference) return
         pendingLogin = target
+        submitting = true
         scope.launch {
-            submitting = true
             clearLoginError()
             try {
-                container.login(target.profile, target.password, otpCode)
+                container.login(target.profile, target.password, otpCode, target.savePassword)
                 password = ""
                 otp = ""
                 pendingLogin = null
@@ -218,8 +257,8 @@ internal fun LoginScreen(
 
     fun submitCredentials() {
         val profile = proposedProfile ?: return
-        if (username.isBlank() || password.isBlank()) return
-        requestLogin(PendingLogin(profile, password), "")
+        if (loading || username.isBlank() || password.isBlank()) return
+        requestLogin(PendingLogin(profile, password, savePassword), "")
     }
 
     fun submitSecondFactor() {
@@ -241,6 +280,7 @@ internal fun LoginScreen(
         password = password,
         otp = otp,
         showPassword = showPassword,
+        savePassword = savePassword,
         loading = loading,
         endpointError = endpointError?.takeIf { host.isNotBlank() },
         errorMessage = displayedError,
@@ -255,7 +295,11 @@ internal fun LoginScreen(
             clearLoginError()
         },
         onHostChange = {
-            host = it
+            val changed = endpoint.withAddressInput(it)
+            host = changed.host
+            protocolName = changed.protocol.name
+            port = changed.port
+            basePath = changed.basePath
             pendingLogin = null
             clearLoginError()
         },
@@ -265,6 +309,7 @@ internal fun LoginScreen(
             clearLoginError()
         },
         onPasswordChange = {
+            passwordEditRevision++
             password = it
             pendingLogin = null
             clearLoginError()
@@ -274,6 +319,28 @@ internal fun LoginScreen(
             clearLoginError()
         },
         onTogglePassword = { showPassword = !showPassword },
+        onSavePasswordChange = { selected ->
+            savePreferenceEditRevision++
+            savePassword = selected
+            pendingLogin = null
+            clearLoginError()
+            val profile = proposedProfile
+            if (!selected && profile != null) {
+                changingPasswordPreference = true
+                scope.launch {
+                    try {
+                        container.clearSavedLoginCredential(profile)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        savePassword = true
+                        error = "无法移除本机保存的密码，请重试"
+                    } finally {
+                        changingPasswordPreference = false
+                    }
+                }
+            }
+        },
         onSubmitCredentials = ::submitCredentials,
         onSubmitOtp = ::submitSecondFactor,
         onBackToCredentials = ::returnToCredentials,
@@ -309,254 +376,228 @@ internal fun LoginPageContent(
     onSubmitOtp: () -> Unit,
     onBackToCredentials: () -> Unit,
     onSwitchAccount: () -> Unit,
+    savePassword: Boolean = false,
+    onSavePasswordChange: (Boolean) -> Unit = {},
 ) {
-    var showConnectionSettings by rememberSaveable { mutableStateOf(false) }
-
+    val canSubmitCredentials = !loading && endpointError == null && endpoint.host.isNotBlank() &&
+        username.isNotBlank() && password.isNotBlank()
+    val canSubmitOtp = !loading && otp.length in 6..8 && otp.all(Char::isDigit)
+    val form: @Composable () -> Unit = {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+            shape = MaterialTheme.shapes.extraLarge,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)),
+        ) {
+            Column(
+                Modifier.fillMaxWidth().padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+            ) {
+                when (step) {
+                    LoginStep.Credentials -> {
+                        ConnectionEndpointFields(
+                            endpoint = endpoint,
+                            onHostChange = onHostChange,
+                            onEndpointChange = onEndpointChange,
+                            enabled = !loading,
+                            error = endpointError,
+                            compact = true,
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            LoginTextField(
+                                value = username,
+                                onValueChange = onUsernameChange,
+                                label = "用户名",
+                                enabled = !loading,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                                tag = LoginUiTags.USERNAME,
+                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                LoginTextField(
+                                    value = password,
+                                    onValueChange = onPasswordChange,
+                                    label = "密码",
+                                    enabled = !loading,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                                    keyboardActions = KeyboardActions(onDone = { if (canSubmitCredentials) onSubmitCredentials() }),
+                                    visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                                    trailingIcon = {
+                                        IconButton(onClick = onTogglePassword, enabled = !loading) {
+                                            Icon(
+                                                if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                                contentDescription = if (showPassword) "隐藏密码" else "显示密码",
+                                            )
+                                        }
+                                    },
+                                    tag = LoginUiTags.PASSWORD,
+                                )
+                                SavePasswordControl(
+                                    checked = savePassword,
+                                    enabled = !loading,
+                                    onCheckedChange = onSavePasswordChange,
+                                    modifier = Modifier.align(Alignment.End),
+                                )
+                            }
+                        }
+                        LoginError(errorMessage)
+                        Button(
+                            onClick = onSubmitCredentials,
+                            enabled = canSubmitCredentials,
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag(LoginUiTags.SUBMIT),
+                        ) { LoginButtonLabel(loading, "连接并登录", "正在连接") }
+                    }
+                    LoginStep.TwoFactor -> {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Outlined.AccountCircle, null, tint = MaterialTheme.colorScheme.primary)
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(username, style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    runCatching { endpoint.baseUrl() }.getOrDefault(endpoint.host),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        LoginTextField(
+                            value = otp,
+                            onValueChange = onOtpChange,
+                            label = "验证码",
+                            enabled = !loading,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { if (canSubmitOtp) onSubmitOtp() }),
+                            tag = LoginUiTags.OTP,
+                        )
+                        LoginError(errorMessage)
+                        Button(
+                            onClick = onSubmitOtp,
+                            enabled = canSubmitOtp,
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag(LoginUiTags.OTP_SUBMIT),
+                        ) { LoginButtonLabel(loading, "验证并登录", "正在验证") }
+                    }
+                }
+            }
+        }
+    }
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            // A title-less top app bar keeps the branded hero centered in the body while giving
-            // the connection-settings and back actions a real app-bar surface with correct insets,
-            // instead of text buttons floated over the scrolling form.
             TopAppBar(
-                title = {},
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(
+                            painterResource(R.drawable.ic_launcher_foreground), null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(32.dp),
+                        )
+                        Text("OpenList", style = MaterialTheme.typography.titleMedium)
+                    }
+                },
                 navigationIcon = {
                     if (step == LoginStep.TwoFactor) {
                         IconButton(
                             onClick = onBackToCredentials,
                             enabled = !loading,
                             modifier = Modifier.testTag(LoginUiTags.OTP_BACK),
-                        ) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "返回",
-                            )
-                        }
+                        ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回登录") }
                     }
                 },
                 actions = {
                     if (step == LoginStep.Credentials) {
                         TextButton(
-                            onClick = { showConnectionSettings = true },
+                            onClick = onSwitchAccount,
                             enabled = !loading,
-                            modifier = Modifier.testTag(LoginUiTags.SETTINGS),
-                        ) {
-                            Text("连接设置")
-                        }
+                            modifier = Modifier.testTag(LoginUiTags.SWITCH_ACCOUNT),
+                        ) { Text("已存账户") }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                ),
             )
         },
-    ) { contentPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(contentPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
+    ) { padding ->
+        BoxWithConstraints(Modifier.fillMaxSize().padding(padding).imePadding()) {
+            val expanded = maxWidth >= 840.dp && LocalDensity.current.fontScale < 1.6f
+            val inset = if (maxWidth < 360.dp) 16.dp else 24.dp
             Column(
-                modifier = Modifier.fillMaxWidth().widthIn(max = 400.dp),
+                modifier = Modifier.fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(min = maxHeight)
+                    .padding(horizontal = inset, vertical = 24.dp),
+                verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(
-                    text = "OpenList",
-                    modifier = Modifier.semantics { heading() },
-                    style = MaterialTheme.typography.headlineMedium,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = if (step == LoginStep.Credentials) {
-                        "连接你的自托管文件空间"
-                    } else {
-                        "完成账号安全验证"
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Center,
-                )
-                Spacer(Modifier.height(36.dp))
-                when (step) {
-                    LoginStep.Credentials -> CredentialsLoginContent(
-                        endpoint = endpoint,
-                        username = username,
-                        password = password,
-                        showPassword = showPassword,
-                        loading = loading,
-                        endpointError = endpointError,
-                        errorMessage = errorMessage,
-                        onHostChange = onHostChange,
-                        onUsernameChange = onUsernameChange,
-                        onPasswordChange = onPasswordChange,
-                        onTogglePassword = onTogglePassword,
-                        onSubmit = onSubmitCredentials,
-                        onSwitchAccount = onSwitchAccount,
-                    )
-                    LoginStep.TwoFactor -> TwoFactorLoginContent(
-                        otp = otp,
-                        loading = loading,
-                        errorMessage = errorMessage,
-                        onOtpChange = onOtpChange,
-                        onSubmit = onSubmitOtp,
-                        onBack = onBackToCredentials,
-                    )
+                if (expanded) {
+                    Row(
+                        Modifier.widthIn(max = 920.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(64.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) { LoginIntroduction(step, expanded = true) }
+                        Column(Modifier.width(440.dp)) { form() }
+                    }
+                } else {
+                    Column(Modifier.widthIn(max = 440.dp).fillMaxWidth()) {
+                        LoginIntroduction(step, expanded = false)
+                        Spacer(Modifier.height(28.dp))
+                        form()
+                    }
                 }
             }
         }
     }
-
-    if (showConnectionSettings) {
-        LoginConnectionSettingsDialog(
-            endpoint = endpoint,
-            onDismiss = { showConnectionSettings = false },
-            onSave = {
-                onEndpointChange(it)
-                showConnectionSettings = false
-            },
-        )
-    }
 }
 
 @Composable
-private fun CredentialsLoginContent(
-    endpoint: LoginEndpointDraft,
-    username: String,
-    password: String,
-    showPassword: Boolean,
-    loading: Boolean,
-    endpointError: String?,
-    errorMessage: String?,
-    onHostChange: (String) -> Unit,
-    onUsernameChange: (String) -> Unit,
-    onPasswordChange: (String) -> Unit,
-    onTogglePassword: () -> Unit,
-    onSubmit: () -> Unit,
-    onSwitchAccount: () -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        LoginTextField(
-            value = endpoint.host,
-            onValueChange = onHostChange,
-            label = "服务器地址 / IP",
-            enabled = !loading,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
-            supportingText = endpointError,
-            isError = endpointError != null,
-            tag = LoginUiTags.HOST,
-        )
-        LoginTextField(
-            value = username,
-            onValueChange = onUsernameChange,
-            label = "账户",
-            enabled = !loading,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-            tag = LoginUiTags.USERNAME,
-        )
-        LoginTextField(
-            value = password,
-            onValueChange = onPasswordChange,
-            label = "密码",
-            enabled = !loading,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Password,
-                imeAction = ImeAction.Done,
-            ),
-            keyboardActions = KeyboardActions(onDone = { onSubmit() }),
-            visualTransformation = if (showPassword) {
-                VisualTransformation.None
-            } else {
-                PasswordVisualTransformation()
-            },
-            trailingIcon = {
-                IconButton(onClick = onTogglePassword, enabled = !loading) {
-                    Icon(
-                        if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                        contentDescription = if (showPassword) "隐藏密码" else "显示密码",
-                    )
-                }
-            },
-            tag = LoginUiTags.PASSWORD,
-        )
-        LoginError(errorMessage)
-        Button(
-            onClick = onSubmit,
-            enabled = !loading && endpointError == null && endpoint.host.isNotBlank() &&
-                username.isNotBlank() && password.isNotBlank(),
-            modifier = Modifier.fillMaxWidth().height(52.dp).testTag(LoginUiTags.SUBMIT),
-            shape = MaterialTheme.shapes.extraLarge,
-            elevation = ButtonDefaults.buttonElevation(
-                defaultElevation = 0.dp,
-                pressedElevation = 0.dp,
-                focusedElevation = 0.dp,
-                hoveredElevation = 0.dp,
-            ),
-        ) {
-            LoginButtonLabel(loading = loading, idleText = "登录")
+private fun LoginIntroduction(step: LoginStep, expanded: Boolean) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (expanded) {
+            Icon(
+                painterResource(R.drawable.ic_launcher_foreground), null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(64.dp),
+            )
+            Spacer(Modifier.height(8.dp))
         }
-        TextButton(
-            onClick = onSwitchAccount,
-            enabled = !loading,
-            modifier = Modifier.align(Alignment.CenterHorizontally).testTag(LoginUiTags.SWITCH_ACCOUNT),
-        ) {
-            Text("切换账号")
-        }
-    }
-}
-
-@Composable
-private fun TwoFactorLoginContent(
-    otp: String,
-    loading: Boolean,
-    errorMessage: String?,
-    onOtpChange: (String) -> Unit,
-    onSubmit: () -> Unit,
-    onBack: () -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Text("两步验证", style = MaterialTheme.typography.titleLarge)
         Text(
-            "请输入身份验证器中显示的验证码",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            if (step == LoginStep.TwoFactor) "验证你的身份"
+            else if (expanded) "连接你的\n文件空间" else "登录你的云盘",
+            style = if (expanded) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineMedium,
+            modifier = Modifier.semantics { heading() },
+        )
+        Text(
+            if (step == LoginStep.Credentials) "从这里，回到你的文件。"
+            else "输入身份验证器中的 6–8 位验证码。",
             style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        LoginTextField(
-            value = otp,
-            onValueChange = onOtpChange,
-            label = "验证码",
-            enabled = !loading,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.NumberPassword,
-                imeAction = ImeAction.Done,
-            ),
-            keyboardActions = KeyboardActions(onDone = { onSubmit() }),
-            tag = LoginUiTags.OTP,
+    }
+}
+
+@Composable
+private fun SavePasswordControl(
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier.heightIn(min = 48.dp)
+            .clip(MaterialTheme.shapes.small)
+            .toggleable(value = checked, enabled = enabled, role = Role.Checkbox, onValueChange = onCheckedChange)
+            .semantics { contentDescription = "在本机加密记住密码" }
+            .testTag(LoginUiTags.SAVE_PASSWORD)
+            .padding(horizontal = 8.dp),
+    ) {
+        Checkbox(checked = checked, onCheckedChange = null, enabled = enabled, modifier = Modifier.size(20.dp))
+        Text(
+            "记住密码",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.38f),
         )
-        LoginError(errorMessage)
-        Button(
-            onClick = onSubmit,
-            enabled = !loading && otp.length in 6..8,
-            modifier = Modifier.fillMaxWidth().height(52.dp).testTag(LoginUiTags.OTP_SUBMIT),
-            shape = MaterialTheme.shapes.extraLarge,
-            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
-        ) {
-            LoginButtonLabel(loading = loading, idleText = "验证并登录")
-        }
-        TextButton(onClick = onBack, enabled = !loading) {
-            Text("返回账号密码登录")
-        }
     }
 }
 
@@ -572,208 +613,62 @@ private fun LoginTextField(
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     trailingIcon: (@Composable () -> Unit)? = null,
-    supportingText: String? = null,
-    isError: Boolean = false,
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
         trailingIcon = trailingIcon,
-        supportingText = supportingText?.let {
-            { Text(it, maxLines = 2) }
-        },
         enabled = enabled,
-        isError = isError,
         singleLine = true,
+        shape = MaterialTheme.shapes.medium,
+        colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant),
         keyboardOptions = keyboardOptions,
         keyboardActions = keyboardActions,
         visualTransformation = visualTransformation,
-        shape = MaterialTheme.shapes.large,
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = Color.Transparent,
-            unfocusedContainerColor = Color.Transparent,
-            disabledContainerColor = Color.Transparent,
-            errorContainerColor = Color.Transparent,
-        ),
         modifier = modifier.fillMaxWidth().testTag(tag),
     )
 }
 
 @Composable
-private fun LoginButtonLabel(loading: Boolean, idleText: String) {
+private fun LoginButtonLabel(loading: Boolean, idleText: String, busyText: String) {
     if (loading) {
         CircularProgressIndicator(
-            modifier = Modifier.size(22.dp),
+            modifier = Modifier.size(20.dp),
             color = MaterialTheme.colorScheme.onPrimary,
             strokeWidth = 2.dp,
         )
-        Spacer(Modifier.size(10.dp))
-        Text("正在连接")
+        Spacer(Modifier.size(12.dp))
+        Text(busyText)
     } else {
         Text(idleText)
+        Spacer(Modifier.size(8.dp))
+        Icon(Icons.AutoMirrored.Filled.ArrowForward, null, modifier = Modifier.size(18.dp))
     }
 }
 
 @Composable
 private fun LoginError(message: String?) {
     message?.let {
-        Text(
-            text = it,
-            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-            color = MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.bodyMedium,
-        )
-    }
-}
-
-@Composable
-private fun LoginConnectionSettingsDialog(
-    endpoint: LoginEndpointDraft,
-    onDismiss: () -> Unit,
-    onSave: (LoginEndpointDraft) -> Unit,
-) {
-    var protocolName by remember(endpoint) { mutableStateOf(endpoint.protocol.name) }
-    var port by remember(endpoint) { mutableStateOf(endpoint.port) }
-    var basePath by remember(endpoint) { mutableStateOf(endpoint.basePath) }
-    val protocol = runCatching { LoginProtocol.valueOf(protocolName) }.getOrDefault(LoginProtocol.HTTP)
-    val candidate = endpoint.copy(protocol = protocol, port = port, basePath = basePath)
-    val settingsError = runCatching {
-        candidate.copy(host = "localhost").baseUrl()
-    }.exceptionOrNull()?.message
-
-    AlertDialog(
-        modifier = Modifier.testTag(LoginUiTags.SETTINGS_DIALOG),
-        onDismissRequest = onDismiss,
-        title = { Text("连接设置") },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(
-                    "普通 OpenList 服务保持默认 HTTP 和 5244 端口即可。",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                ConnectionSettingCard(
-                    title = "连接协议",
-                    supportingText = "仅在服务器启用 HTTPS 时切换。",
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        LoginProtocol.entries.forEach { option ->
-                            FilterChip(
-                                selected = protocol == option,
-                                onClick = { protocolName = option.name },
-                                label = { Text(option.scheme.uppercase()) },
-                            )
-                        }
-                    }
-                }
-                ConnectionSettingCard(
-                    title = "端口",
-                    supportingText = "留空时使用协议默认端口。",
-                ) {
-                    OutlinedTextField(
-                        value = port,
-                        onValueChange = { port = it.filter(Char::isDigit).take(5) },
-                        label = { Text("端口") },
-                        placeholder = { Text(DEFAULT_LOGIN_PORT) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        colors = transparentOutlinedTextFieldColors(),
-                        modifier = Modifier.fillMaxWidth().testTag(LoginUiTags.SETTINGS_PORT),
-                    )
-                }
-                ConnectionSettingCard(
-                    title = "服务器路径",
-                    supportingText = "仅反向代理部署在子路径时填写。",
-                ) {
-                    OutlinedTextField(
-                        value = basePath,
-                        onValueChange = { basePath = it },
-                        label = { Text("路径（可选）") },
-                        placeholder = { Text("/openlist") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                        colors = transparentOutlinedTextFieldColors(),
-                        modifier = Modifier.fillMaxWidth().testTag(LoginUiTags.SETTINGS_PATH),
-                    )
-                }
-                if (protocol == LoginProtocol.HTTP) {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                        ),
-                        shape = MaterialTheme.shapes.large,
-                    ) {
-                        Text(
-                            "HTTP 不会加密账号、密码和验证码；公网服务器强烈建议改用 HTTPS。",
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
-                settingsError?.let {
-                    Text(
-                        it,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(candidate) }, enabled = settingsError == null) {
-                Text("保存")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-    )
-}
-
-@Composable
-private fun ConnectionSettingCard(
-    title: String,
-    supportingText: String,
-    content: @Composable () -> Unit,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        ),
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+        Surface(
+            color = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
         ) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
-            Text(
-                supportingText,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
-            )
-            content()
+            Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Outlined.ErrorOutline, null, modifier = Modifier.size(20.dp))
+                Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            }
         }
     }
 }
 
-@Composable
-internal fun transparentOutlinedTextFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedContainerColor = Color.Transparent,
-    unfocusedContainerColor = Color.Transparent,
-    disabledContainerColor = Color.Transparent,
-    errorContainerColor = Color.Transparent,
-)
-
-@Preview(showBackground = true, widthDp = 412, heightDp = 915)
+@Preview(name = "Connection", showBackground = true, widthDp = 412, heightDp = 915)
+@Preview(name = "Connection large text", showBackground = true, widthDp = 360, heightDp = 800, fontScale = 2f)
 @Composable
 private fun LoginPagePreview() {
-    MaterialTheme {
+    OpenListTheme {
         LoginPageContent(
             step = LoginStep.Credentials,
             endpoint = LoginEndpointDraft(host = "192.168.1.100"),
@@ -801,8 +696,8 @@ private fun LoginPagePreview() {
 @Preview(showBackground = true, widthDp = 412, heightDp = 915)
 @Composable
 private fun LoginConnectionSettingsPreview() {
-    MaterialTheme {
-        LoginConnectionSettingsDialog(
+    OpenListTheme {
+        ConnectionOptionsDialog(
             endpoint = LoginEndpointDraft(host = "192.168.1.100"),
             onDismiss = {},
             onSave = {},

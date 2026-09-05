@@ -317,6 +317,7 @@ class DownloadWorker(
             stopReason == WorkInfo.STOP_REASON_CANCELLED_BY_APP
 
     companion object {
+        const val WORK_TAG = "openlist-download"
         private const val ContentScheme = "content"
         private const val NOTIFICATION_CHANNEL_ID = "openlist_downloads"
         private const val FALLBACK_NOTIFICATION_ID = 0x4f4d
@@ -372,7 +373,14 @@ class DownloadWorker(
                         .build(),
                 )
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
-                .addTag("openlist-download")
+                .addTag(WORK_TAG)
+                .apply {
+                    TransferWorkMetadata.tags(
+                        binding = sessionBinding.value,
+                        remotePath = remotePath,
+                        createdAtMillis = System.currentTimeMillis(),
+                    ).forEach { addTag(it) }
+                }
                 .build()
             return request
         }
